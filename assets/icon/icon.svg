@@ -1,0 +1,48 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="innerGlow">
+      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1024" height="1024" fill="#1a1a1a"/>
+  
+  <!-- Concentric circles -->
+  <circle cx="512" cy="512" r="400" fill="none" stroke="#00ff41" stroke-width="3" opacity="0.8" filter="url(#glow)"/>
+  <circle cx="512" cy="512" r="350" fill="none" stroke="#00ff41" stroke-width="2" opacity="0.6" filter="url(#glow)"/>
+  <circle cx="512" cy="512" r="300" fill="none" stroke="#00ff41" stroke-width="2" opacity="0.7" filter="url(#glow)"/>
+  
+  <!-- Main lightning bolt -->
+  <path d="M350 250 L500 400 L450 450 L600 650 L500 600 L400 750 L350 250" 
+        fill="#00ff41" filter="url(#innerGlow)"/>
+  
+  <!-- Lightning bolt details -->
+  <path d="M380 280 L480 380 L440 420 L520 580 L480 540 L420 680 L380 280" 
+        fill="#00cc33" opacity="0.8"/>
+  
+  <!-- Dynamic lines and particles -->
+  <line x1="200" y1="200" x2="250" y2="180" stroke="#00ff41" stroke-width="2" opacity="0.6"/>
+  <line x1="800" y1="150" x2="850" y2="170" stroke="#00ff41" stroke-width="1.5" opacity="0.5"/>
+  <line x1="150" y1="600" x2="200" y2="620" stroke="#00ff41" stroke-width="1" opacity="0.4"/>
+  <line x1="850" y1="650" x2="900" y2="630" stroke="#00ff41" stroke-width="1.5" opacity="0.5"/>
+  
+  <!-- Small particles -->
+  <circle cx="180" cy="180" r="3" fill="#00ff41" opacity="0.8"/>
+  <circle cx="820" cy="160" r="2" fill="#00ff41" opacity="0.6"/>
+  <circle cx="160" cy="610" r="2.5" fill="#00ff41" opacity="0.7"/>
+  <circle cx="840" cy="640" r="2" fill="#00ff41" opacity="0.5"/>
+  <circle cx="300" cy="300" r="1.5" fill="#00ff41" opacity="0.9"/>
+  <circle cx="720" cy="280" r="1" fill="#00ff41" opacity="0.8"/>
+</svg> 
