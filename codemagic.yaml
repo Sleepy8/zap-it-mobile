@@ -1,0 +1,73 @@
+workflows:
+  ios-workflow:
+    name: iOS Build
+    environment:
+      vars:
+        XCODE_PROJECT: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+        BUNDLE_ID: "com.example.zapItMobile"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Set up code signing settings on Xcode project
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "com.example.zapItMobile" --type IOS_APP_STORE --create
+          xcode-project use-profiles
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Flutter build ipa
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/tmp/exportOptions.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+
+  android-workflow:
+    name: Android Build
+    environment:
+      vars:
+        PACKAGE_NAME: "com.example.zap_it_mobile"
+      flutter: stable
+      android_signing:
+        - keystore_reference
+    scripts:
+      - name: Set up code signing settings
+        script: |
+          echo $CM_KEYSTORE_PATH | base64 --decode > /tmp/keystore.keystore
+          cd android
+          echo "storeFile=/tmp/keystore.keystore" >> key.properties
+          echo "storePassword=$CM_KEYSTORE_PASSWORD" >> key.properties
+          echo "keyAlias=$CM_KEY_ALIAS" >> key.properties
+          echo "keyPassword=$CM_KEY_PASSWORD" >> key.properties
+      - name: Verify Google Services
+        script: |
+          echo "=== Verifying google-services.json files ==="
+          ls -la android/app/google-services.json
+          ls -la android/app/src/main/google-services.json
+          ls -la android/app/src/debug/google-services.json
+          ls -la android/app/src/release/google-services.json
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Flutter build apk
+        script: flutter build apk --release
+      - name: Flutter build appbundle
+        script: flutter build appbundle --release
+    artifacts:
+      - build/**/outputs/**/*.apk
+      - build/**/outputs/**/mapping.txt
+      - /tmp/bitrise_upload_dir/*.aab
+      - flutter_drive.log
+    publishing:
+      google_play:
+        track: internal
+        submit_as_draft: true 
