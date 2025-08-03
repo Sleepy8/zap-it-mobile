@@ -31,16 +31,21 @@ void main() async {
     DebugHelper.logPlatformInfo();
   }
   
-  try {
-    // Initialize Firebase with error handling
-    await initializeFirebase();
-    
-    // Initialize services only if Firebase is successful
-    await _initializeServices();
-    
-  } catch (e) {
-    DebugHelper.logError('Critical initialization error', e);
-    // Continue with app even if services fail
+  // Skip Firebase on iOS for now to test UI
+  if (Platform.isIOS) {
+    DebugHelper.log('Skipping Firebase initialization on iOS for UI testing');
+  } else {
+    try {
+      // Initialize Firebase with error handling
+      await initializeFirebase();
+      
+      // Initialize services only if Firebase is successful
+      await _initializeServices();
+      
+    } catch (e) {
+      DebugHelper.logError('Critical initialization error', e);
+      // Continue with app even if services fail
+    }
   }
   
   runApp(const ZapItApp());
