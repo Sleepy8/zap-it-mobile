@@ -25,9 +25,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Production mode - minimal logging
-  if (kDebugMode) {
-    DebugHelper.log('App starting in production mode');
-  }
+  DebugHelper.log('App starting in production mode');
   
   try {
     // Initialize Firebase with error handling
@@ -38,9 +36,7 @@ void main() async {
     
   } catch (e) {
     // In production, log errors but don't show debug info
-    if (kDebugMode) {
-      DebugHelper.logError('Critical initialization error', e);
-    }
+    DebugHelper.logError('Critical initialization error', e);
     // Continue with app even if services fail
   }
   
@@ -51,26 +47,18 @@ Future<void> _initializeServices() async {
   // Initialize push notifications with better error handling
   try {
     await NotificationService().initializePushNotifications();
-    if (kDebugMode) {
-      DebugHelper.log('Notification service initialized');
-    }
+    DebugHelper.log('Notification service initialized');
   } catch (e) {
-    if (kDebugMode) {
-      DebugHelper.logError('Notification service initialization failed', e);
-    }
+    DebugHelper.logError('Notification service initialization failed', e);
     // Don't crash the app if notifications fail
   }
 
   // Start background service with better error handling
   try {
     await BackgroundService().start();
-    if (kDebugMode) {
-      DebugHelper.log('Background service started');
-    }
+    DebugHelper.log('Background service started');
   } catch (e) {
-    if (kDebugMode) {
-      DebugHelper.logError('Background service initialization failed', e);
-    }
+    DebugHelper.logError('Background service initialization failed', e);
     // Don't crash the app if background service fails
   }
 }
