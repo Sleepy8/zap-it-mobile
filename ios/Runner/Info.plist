@@ -38,8 +38,6 @@
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
 	<key>MTL_ENABLE_DEBUG_INFO</key>
 	<false/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
@@ -81,6 +79,7 @@
 	<array>
 		<string>remote-notification</string>
 		<string>background-processing</string>
+		<string>background-fetch</string>
 	</array>
 	
 	<!-- Permessi per fotocamera e galleria -->
@@ -103,5 +102,28 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	
+	<!-- Configurazioni per migliorare la stabilità -->
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIRequiresFullScreen</key>
+	<false/>
+	<key>UIStatusBarHidden</key>
+	<false/>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	
+	<!-- Configurazioni per notifiche locali -->
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
+	
+	<!-- Configurazioni per background app refresh -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<string>background-processing</string>
+		<string>background-fetch</string>
+		<string>audio</string>
+	</array>
 </dict>
 </plist>

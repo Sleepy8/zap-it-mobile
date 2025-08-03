@@ -13,7 +13,6 @@ import 'screens/friend_requests_screen.dart';
 import 'screens/messages_screen.dart';
 import 'screens/e2ee_setup_screen.dart';
 import 'screens/user_profile_screen.dart';
-import 'screens/fallback_screen.dart';
 import 'firebase_init.dart';
 import 'services/background_service.dart';
 import 'services/auth_service.dart';
@@ -24,10 +23,9 @@ import 'debug_helper.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Enable debug logging in debug mode
+  // Production mode - minimal logging
   if (kDebugMode) {
-    DebugHelper.log('App starting in debug mode');
-    DebugHelper.logPlatformInfo();
+    DebugHelper.log('App starting in production mode');
   }
   
   try {
@@ -38,7 +36,10 @@ void main() async {
     await _initializeServices();
     
   } catch (e) {
-    DebugHelper.logError('Critical initialization error', e);
+    // In production, log errors but don't show debug info
+    if (kDebugMode) {
+      DebugHelper.logError('Critical initialization error', e);
+    }
     // Continue with app even if services fail
   }
   
@@ -49,18 +50,26 @@ Future<void> _initializeServices() async {
   // Initialize push notifications with better error handling
   try {
     await NotificationService().initializePushNotifications();
-    DebugHelper.log('Notification service initialized');
+    if (kDebugMode) {
+      DebugHelper.log('Notification service initialized');
+    }
   } catch (e) {
-    DebugHelper.logError('Notification service initialization failed', e);
+    if (kDebugMode) {
+      DebugHelper.logError('Notification service initialization failed', e);
+    }
     // Don't crash the app if notifications fail
   }
 
   // Start background service with better error handling
   try {
     await BackgroundService().start();
-    DebugHelper.log('Background service started');
+    if (kDebugMode) {
+      DebugHelper.log('Background service started');
+    }
   } catch (e) {
-    DebugHelper.logError('Background service initialization failed', e);
+    if (kDebugMode) {
+      DebugHelper.logError('Background service initialization failed', e);
+    }
     // Don't crash the app if background service fails
   }
 }
@@ -95,7 +104,6 @@ class ZapItApp extends StatelessWidget {
             username: args['username'],
           );
         },
-        '/fallback': (context) => const FallbackScreen(),
       },
     );
   }
@@ -110,19 +118,10 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   final AuthService _authService = AuthServiceFirebaseImpl();
-  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    // Set a timeout to show login screen if Firebase takes too long
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted && !_isInitialized) {
-        setState(() {
-          _isInitialized = true;
-        });
-      }
-    });
   }
 
   @override
@@ -132,29 +131,45 @@ class _AuthWrapperState extends State<AuthWrapper> {
       stream: getFirebaseAuthStream(), // Use the safe stream function
       builder: (context, snapshot) {
         // Show loading while checking auth state
-        if (snapshot.connectionState == ConnectionState.waiting && !_isInitialized) {
-          return const FallbackScreen();
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: AppTheme.primaryDark,
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  AnimatedLogo(
+                    size: 130,
+                    isSplashScreen: true,
+                    showText: false,
+                  ),
+                  const SizedBox(height: 20),
+                  const CircularProgressIndicator(
+                    color: AppTheme.limeAccent,
+                  ),
+                ],
+              ),
+            ),
+          );
         }
         
-        // Handle error state or timeout
-        if (snapshot.hasError || _isInitialized) {
-          if (snapshot.hasError) {
+        // Handle error state
+        if (snapshot.hasError) {
+          if (kDebugMode) {
             DebugHelper.logError('Auth stream error', snapshot.error);
           }
-          // Show login screen on error or timeout
+          // Show login screen on error
           return const LoginScreen();
         }
         
         // User is logged in - show MainScreen
         if (snapshot.hasData && snapshot.data != null) {
-          _isInitialized = true;
           return const MainScreen();
         }
         
         // User not logged in - show LoginScreen
-        _isInitialized = true;
         return const LoginScreen();
       },
     );
   }
-}
+} 

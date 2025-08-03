@@ -6,6 +6,7 @@ import 'package:vibration/vibration.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 
 // Global notification instance
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -14,65 +15,69 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 // Background message handler - ONLY ONE HANDLER
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  
-  
-  
-  
-  // Initialize local notifications for background
-  await _initializeLocalNotifications();
-  
-  // Handle ZAP notifications
-  if (message.data['type'] == 'new_zap') {
-    await _handleZapNotification(message);
-  }
-  
-  // Handle message notifications
-  if (message.data['type'] == 'new_message') {
-    await _handleMessageNotification(message);
+  try {
+    // Initialize local notifications for background
+    await _initializeLocalNotifications();
+    
+    // Handle ZAP notifications
+    if (message.data['type'] == 'new_zap') {
+      await _handleZapNotification(message);
+    }
+    
+    // Handle message notifications
+    if (message.data['type'] == 'new_message') {
+      await _handleMessageNotification(message);
+    }
+  } catch (e) {
+    print('Background message handler error: $e');
   }
 }
 
 // Initialize local notifications
 Future<void> _initializeLocalNotifications() async {
-  const AndroidInitializationSettings initializationSettingsAndroid =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-  
-  const DarwinInitializationSettings initializationSettingsIOS =
-      DarwinInitializationSettings(
-    requestAlertPermission: true,
-    requestBadgePermission: true,
-    requestSoundPermission: true,
-  );
-  
-  const InitializationSettings initializationSettings = InitializationSettings(
-    android: initializationSettingsAndroid,
-    iOS: initializationSettingsIOS,
-  );
-  
-  await flutterLocalNotificationsPlugin.initialize(
-    initializationSettings,
-    onDidReceiveNotificationResponse: (NotificationResponse response) {
+  try {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    
+    const DarwinInitializationSettings initializationSettingsIOS =
+        DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    
+    const InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsIOS,
+    );
+    
+    await flutterLocalNotificationsPlugin.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        // Handle notification tap
+      },
+    );
+    
+    // Configurazione canale ZAP INVISIBILE (solo Android)
+    if (Platform.isAndroid) {
+      const AndroidNotificationChannel zapChannel = AndroidNotificationChannel(
+        'zap_vibration',
+        'ZAP Vibration',
+        description: 'Canale per vibrazioni ZAP invisibili',
+        importance: Importance.high,
+        playSound: false, // Nessun suono
+        enableVibration: true, // Solo vibrazione
+        showBadge: false, // Nessun badge
+        enableLights: false, // Nessuna luce
+      );
       
-    },
-  );
-  
-  // Configurazione canale ZAP INVISIBILE
-  const AndroidNotificationChannel zapChannel = AndroidNotificationChannel(
-    'zap_vibration',
-    'ZAP Vibration',
-    description: 'Canale per vibrazioni ZAP invisibili',
-    importance: Importance.high,
-    playSound: false, // Nessun suono
-    enableVibration: true, // Solo vibrazione
-    showBadge: false, // Nessun badge
-    enableLights: false, // Nessuna luce
-  );
-  
-  await flutterLocalNotificationsPlugin
-      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-      ?.createNotificationChannel(zapChannel);
-  
-  
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(zapChannel);
+    }
+  } catch (e) {
+    print('Local notifications initialization error: $e');
+  }
 }
 
 // Handle ZAP notification - INVISIBLE, ONLY VIBRATION
@@ -87,9 +92,8 @@ Future<void> _handleZapNotification(RemoteMessage message) async {
     // RIMOSSO: _showBeautifulZapNotification - NOTIFICA INVISIBILE
     // Gli ZAP sono ora quasi invisibili, solo vibrazione
     
-    
   } catch (e) {
-    
+    print('ZAP notification error: $e');
   }
 }
 
@@ -102,9 +106,8 @@ Future<void> _handleMessageNotification(RemoteMessage message) async {
     // Show message notification
     await _showMessageNotification(senderName, conversationId);
     
-    
   } catch (e) {
-    
+    print('Message notification error: $e');
   }
 }
 
@@ -115,11 +118,6 @@ Future<void> _triggerZapVibration() async {
     final hasVibrator = await Vibration.hasVibrator();
     final hasAmplitudeControl = await Vibration.hasAmplitudeControl();
     final hasCustomVibrationsSupport = await Vibration.hasCustomVibrationsSupport();
-    
-    
-    
-    
-    
     
     if (hasVibrator == true) {
       // ZAP vibration pattern - unico effetto visibile
@@ -134,18 +132,16 @@ Future<void> _triggerZapVibration() async {
           pattern: [0, 100, 50, 150, 50, 200, 50, 150, 50, 100],
         );
       }
-      
     } else {
-      
+      print('Device does not support vibration');
     }
   } catch (e) {
-    
+    print('Vibration error: $e');
     // Fallback to simple vibration
     try {
       await Vibration.vibrate();
-      
     } catch (fallbackError) {
-      
+      print('Fallback vibration error: $fallbackError');
     }
   }
 }
@@ -155,37 +151,41 @@ Future<void> _triggerZapVibration() async {
 
 // Show message notification
 Future<void> _showMessageNotification(String senderName, String conversationId) async {
-  final AndroidNotificationDetails androidPlatformChannelSpecifics =
-      AndroidNotificationDetails(
-    'message_channel',
-    'Message Notifications',
-    channelDescription: 'Notifications for new messages',
-    importance: Importance.high,
-    priority: Priority.high,
-    enableVibration: true,
-    playSound: true,
-    color: const Color(0xFF2196F3), // Blue color
-  );
-  
-  const DarwinNotificationDetails iOSPlatformChannelSpecifics =
-      DarwinNotificationDetails(
-    presentAlert: true,
-    presentBadge: true,
-    presentSound: true,
-  );
-  
-  final NotificationDetails platformChannelSpecifics = NotificationDetails(
-    android: androidPlatformChannelSpecifics,
-    iOS: iOSPlatformChannelSpecifics,
-  );
-  
-  await flutterLocalNotificationsPlugin.show(
-    2, // Unique ID for message notifications
-    'Nuovo Messaggio 💬',
-    '$senderName ti ha inviato un messaggio',
-    platformChannelSpecifics,
-    payload: 'message:$conversationId',
-  );
+  try {
+    final AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'message_channel',
+      'Message Notifications',
+      channelDescription: 'Notifications for new messages',
+      importance: Importance.high,
+      priority: Priority.high,
+      enableVibration: true,
+      playSound: true,
+      color: const Color(0xFF2196F3), // Blue color
+    );
+    
+    const DarwinNotificationDetails iOSPlatformChannelSpecifics =
+        DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+    
+    final NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+      iOS: iOSPlatformChannelSpecifics,
+    );
+    
+    await flutterLocalNotificationsPlugin.show(
+      2, // Unique ID for message notifications
+      'Nuovo Messaggio 💬',
+      '$senderName ti ha inviato un messaggio',
+      platformChannelSpecifics,
+      payload: 'message:$conversationId',
+    );
+  } catch (e) {
+    print('Show message notification error: $e');
+  }
 }
 
 class NotificationService {
@@ -203,50 +203,57 @@ class NotificationService {
   // Call this in main/init
   Future<void> initializePushNotifications() async {
     try {
-      
-      
       // Initialize local notifications
       await _initializeLocalNotifications();
       
-      // Request permissions
-      final settings = await _firebaseMessaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+      // Request permissions with better error handling
+      try {
+        final settings = await _firebaseMessaging.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        print('Notification permission status: ${settings.authorizationStatus}');
+      } catch (e) {
+        print('Permission request error: $e');
+      }
       
-      
-      // Get FCM token
-      String? token = await _firebaseMessaging.getToken();
-      
+      // Get FCM token with error handling
+      String? token;
+      try {
+        token = await _firebaseMessaging.getToken();
+        print('FCM Token obtained: ${token != null ? 'Yes' : 'No'}');
+      } catch (e) {
+        print('FCM token error: $e');
+      }
       
       // Save token locally first (always)
       if (token != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('fcm_token', token);
-        
-        
-        // Save token to Firestore if user is logged in
-        if (_auth.currentUser != null) {
-          await _firestore.collection('users').doc(_auth.currentUser!.uid).update({
-            'fcmToken': token,
-            'lastTokenUpdate': FieldValue.serverTimestamp(),
-          });
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('fcm_token', token);
           
+          // Save token to Firestore if user is logged in
+          if (_auth.currentUser != null) {
+            await _firestore.collection('users').doc(_auth.currentUser!.uid).update({
+              'fcmToken': token,
+              'lastTokenUpdate': FieldValue.serverTimestamp(),
+            });
+          }
+        } catch (e) {
+          print('Token save error: $e');
         }
       }
       
       // Handle foreground messages
       FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-        
+        print('Foreground message received: ${message.data}');
         
         if (message.data['type'] == 'new_zap') {
-          
           await _handleZapNotification(message);
         }
         
         if (message.data['type'] == 'new_message') {
-          
           newMessageArrived.value = true;
           await _handleMessageNotification(message);
         }
@@ -257,20 +264,23 @@ class NotificationService {
       
       // Handle app opened from notification
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        
+        print('App opened from notification: ${message.data}');
         _handleNotificationTap(message);
       });
       
       // Handle initial message
-      RemoteMessage? initialMessage = await _firebaseMessaging.getInitialMessage();
-      if (initialMessage != null) {
-        
-        _handleNotificationTap(initialMessage);
+      try {
+        RemoteMessage? initialMessage = await _firebaseMessaging.getInitialMessage();
+        if (initialMessage != null) {
+          print('Initial message: ${initialMessage.data}');
+          _handleNotificationTap(initialMessage);
+        }
+      } catch (e) {
+        print('Initial message error: $e');
       }
       
-      
     } catch (e) {
-      
+      print('Push notifications initialization error: $e');
     }
   }
 

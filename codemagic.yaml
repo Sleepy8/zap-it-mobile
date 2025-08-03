@@ -6,6 +6,7 @@ workflows:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.example.zapItMobile"
+        FLUTTER_VERSION: "stable"
       flutter: stable
       xcode: latest
       cocoapods: default
@@ -17,14 +18,16 @@ workflows:
           xcode-project use-profiles
       - name: Get Flutter packages
         script: flutter pub get
-      - name: Flutter build ipa
+      - name: Flutter build ipa for App Store
         script: |
           flutter build ipa --release \
-            --export-options-plist=ios/exportOptions.plist
+            --export-options-plist=ios/exportOptions.plist \
+            --target=lib/main_prod.dart
       - name: Build IPA for ad-hoc distribution
         script: |
           flutter build ipa --release \
-            --export-options-plist=ios/exportOptions-adhoc.plist
+            --export-options-plist=ios/exportOptions-adhoc.plist \
+            --target=lib/main_prod.dart
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -41,6 +44,7 @@ workflows:
     environment:
       vars:
         PACKAGE_NAME: "com.example.zap_it_mobile"
+        FLUTTER_VERSION: "stable"
       flutter: stable
       android_signing:
         - keystore_reference
@@ -63,9 +67,9 @@ workflows:
       - name: Get Flutter packages
         script: flutter pub get
       - name: Flutter build apk
-        script: flutter build apk --release
+        script: flutter build apk --release --target=lib/main_prod.dart
       - name: Flutter build appbundle
-        script: flutter build appbundle --release
+        script: flutter build appbundle --release --target=lib/main_prod.dart
     artifacts:
       - build/**/outputs/**/*.apk
       - build/**/outputs/**/mapping.txt
@@ -74,4 +78,19 @@ workflows:
     publishing:
       google_play:
         track: internal
-        submit_as_draft: true 
+        submit_as_draft: true
+
+  web-workflow:
+    name: Web Build
+    environment:
+      vars:
+        FLUTTER_VERSION: "stable"
+      flutter: stable
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Flutter build web
+        script: flutter build web --release --target=lib/main_prod.dart
+    artifacts:
+      - build/web/**
+      - flutter_drive.log 
