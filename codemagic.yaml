@@ -20,7 +20,11 @@ workflows:
       - name: Flutter build ipa
         script: |
           flutter build ipa --release \
-            --export-options-plist=/tmp/exportOptions.plist
+            --export-options-plist=ios/exportOptions.plist
+      - name: Build IPA for ad-hoc distribution
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=ios/exportOptions-adhoc.plist
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
