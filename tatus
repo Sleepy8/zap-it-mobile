@@ -1,0 +1,10 @@
+[1mdiff --git a/android/gradle/wrapper/gradle-wrapper.properties b/android/gradle/wrapper/gradle-wrapper.properties[m
+[1mindex 8bc9958..5e6b542 100644[m
+[1m--- a/android/gradle/wrapper/gradle-wrapper.properties[m
+[1m+++ b/android/gradle/wrapper/gradle-wrapper.properties[m
+[36m@@ -2,4 +2,4 @@[m [mdistributionBase=GRADLE_USER_HOME[m
+ distributionPath=wrapper/dists[m
+ zipStoreBase=GRADLE_USER_HOME[m
+ zipStorePath=wrapper/dists[m
+[31m-distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-all.zip[m
+[32m+[m[32mdistributionUrl=https\://services.gradle.org/distributions/gradle-8.4-all.zip[m
