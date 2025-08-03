@@ -1,16 +1,22 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
+import 'dart:developer' as developer;
 
 Future<void> initializeFirebase() async {
   try {
+    developer.log('Starting Firebase initialization...', name: 'Firebase');
+    
     // Check if Firebase is already initialized
     if (Firebase.apps.isNotEmpty) {
+      developer.log('Firebase already initialized, skipping...', name: 'Firebase');
       return;
     }
     
     // Initialize Firebase with platform-specific options
     if (Platform.isIOS) {
+      developer.log('Initializing Firebase for iOS...', name: 'Firebase');
+      
       await Firebase.initializeApp(
         options: const FirebaseOptions(
           apiKey: "AIzaSyBN8ih0LxKdiXJ4xM5vkUIDrKOO-Uq-jW0",
@@ -20,22 +26,36 @@ Future<void> initializeFirebase() async {
           storageBucket: "zap-it-ac442.firebasestorage.app",
         ),
       );
+      
+      developer.log('Firebase initialized successfully for iOS', name: 'Firebase');
     } else {
+      developer.log('Initializing Firebase for other platforms...', name: 'Firebase');
       await Firebase.initializeApp();
+      developer.log('Firebase initialized successfully for other platforms', name: 'Firebase');
     }
     
-    print('Firebase initialized successfully');
+    // Test Firebase Auth
+    try {
+      final auth = FirebaseAuth.instance;
+      developer.log('Firebase Auth instance created successfully', name: 'Firebase');
+    } catch (e) {
+      developer.log('Firebase Auth test failed: $e', name: 'Firebase');
+    }
+    
   } catch (e) {
-    print('Firebase initialization failed: $e');
+    developer.log('Firebase initialization failed: $e', name: 'Firebase');
     // Don't rethrow - let the app continue without Firebase
   }
 }
 
 Stream<User?> getFirebaseAuthStream() {
   try {
-    return FirebaseAuth.instance.authStateChanges();
+    developer.log('Getting Firebase Auth stream...', name: 'Firebase');
+    final stream = FirebaseAuth.instance.authStateChanges();
+    developer.log('Firebase Auth stream created successfully', name: 'Firebase');
+    return stream;
   } catch (e) {
-    print('Firebase Auth stream error: $e');
+    developer.log('Firebase Auth stream error: $e', name: 'Firebase');
     // Return empty stream if Firebase Auth fails
     return Stream.value(null);
   }

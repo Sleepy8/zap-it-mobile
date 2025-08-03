@@ -112,15 +112,17 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final AuthService _authService = AuthServiceFirebaseImpl();
   bool _isInitialized = false;
+  bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
-    // Set a timeout to show login screen if Firebase takes too long
-    Future.delayed(const Duration(seconds: 5), () {
+    // Set a shorter timeout to show login screen if Firebase takes too long
+    Future.delayed(const Duration(seconds: 3), () {
       if (mounted && !_isInitialized) {
         setState(() {
           _isInitialized = true;
+          _hasError = true;
         });
       }
     });
@@ -134,11 +136,48 @@ class _AuthWrapperState extends State<AuthWrapper> {
       builder: (context, snapshot) {
         // Show loading while checking auth state
         if (snapshot.connectionState == ConnectionState.waiting && !_isInitialized) {
-          return const FallbackScreen();
+          return Scaffold(
+            backgroundColor: AppTheme.primaryDark,
+            body: SafeArea(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedLogo(
+                      size: 130,
+                      isSplashScreen: true,
+                      showText: true,
+                    ),
+                    const SizedBox(height: 30),
+                    const Text(
+                      'Zap It',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.limeAccent,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Caricamento...',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.white70,
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    const CircularProgressIndicator(
+                      color: AppTheme.limeAccent,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
         }
         
         // Handle error state or timeout
-        if (snapshot.hasError || _isInitialized) {
+        if (snapshot.hasError || _hasError) {
           if (snapshot.hasError) {
             DebugHelper.logError('Auth stream error', snapshot.error);
           }
