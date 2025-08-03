@@ -118,8 +118,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void initState() {
     super.initState();
     // Set a shorter timeout to show login screen if Firebase takes too long
-    Future.delayed(const Duration(seconds: 3), () {
+    // iOS needs shorter timeout due to different initialization behavior
+    final timeoutDuration = Platform.isIOS ? const Duration(seconds: 2) : const Duration(seconds: 3);
+    
+    Future.delayed(timeoutDuration, () {
       if (mounted && !_isInitialized) {
+        DebugHelper.log('Auth timeout reached, forcing login screen');
         setState(() {
           _isInitialized = true;
           _hasError = true;

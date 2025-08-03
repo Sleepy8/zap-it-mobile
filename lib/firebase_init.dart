@@ -17,17 +17,30 @@ Future<void> initializeFirebase() async {
     if (Platform.isIOS) {
       developer.log('Initializing Firebase for iOS...', name: 'Firebase');
       
-      await Firebase.initializeApp(
-        options: const FirebaseOptions(
-          apiKey: "AIzaSyBN8ih0LxKdiXJ4xM5vkUIDrKOO-Uq-jW0",
-          appId: "1:927515149799:ios:2428144d2df0d4f233a942",
-          messagingSenderId: "927515149799",
-          projectId: "zap-it-ac442",
-          storageBucket: "zap-it-ac442.firebasestorage.app",
-        ),
-      );
-      
-      developer.log('Firebase initialized successfully for iOS', name: 'Firebase');
+      // For iOS, we need to be more careful with initialization
+      try {
+        await Firebase.initializeApp(
+          options: const FirebaseOptions(
+            apiKey: "AIzaSyBN8ih0LxKdiXJ4xM5vkUIDrKOO-Uq-jW0",
+            appId: "1:927515149799:ios:2428144d2df0d4f233a942",
+            messagingSenderId: "927515149799",
+            projectId: "zap-it-ac442",
+            storageBucket: "zap-it-ac442.firebasestorage.app",
+          ),
+        );
+        developer.log('Firebase initialized successfully for iOS', name: 'Firebase');
+      } catch (iosError) {
+        developer.log('iOS Firebase initialization failed: $iosError', name: 'Firebase');
+        // Try without options as fallback
+        try {
+          await Firebase.initializeApp();
+          developer.log('Firebase initialized with fallback method for iOS', name: 'Firebase');
+        } catch (fallbackError) {
+          developer.log('Firebase fallback initialization also failed: $fallbackError', name: 'Firebase');
+          // Don't rethrow - let the app continue without Firebase
+          return;
+        }
+      }
     } else {
       developer.log('Initializing Firebase for other platforms...', name: 'Firebase');
       await Firebase.initializeApp();
