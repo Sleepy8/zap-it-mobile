@@ -235,7 +235,6 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.limeAccent,
-                    foregroundColor: AppTheme.primaryDark,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -246,6 +245,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
+                      color: AppTheme.primaryDark,
                     ),
                   ),
                 ),
@@ -264,7 +264,6 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
-                    foregroundColor: AppTheme.textSecondary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     side: const BorderSide(color: AppTheme.textSecondary),
                     shape: RoundedRectangleBorder(
@@ -276,6 +275,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
+                      color: AppTheme.textSecondary,
                     ),
                   ),
                 ),

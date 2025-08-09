@@ -448,9 +448,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.errorColor,
-              foregroundColor: Colors.white,
             ),
-            child: const Text('Blocca'),
+            child: const Text(
+              'Blocca',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -708,9 +710,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.errorColor,
-              foregroundColor: Colors.white,
             ),
-            child: const Text('Elimina'),
+            child: const Text(
+              'Elimina',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -1290,9 +1294,11 @@ class _ChatScreenState extends State<ChatScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.errorColor,
-              foregroundColor: Colors.white,
             ),
-            child: const Text('Blocca'),
+            child: const Text(
+              'Blocca',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -1375,9 +1381,11 @@ class _ChatScreenState extends State<ChatScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.errorColor,
-              foregroundColor: Colors.white,
             ),
-            child: const Text('Elimina'),
+            child: const Text(
+              'Elimina',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),

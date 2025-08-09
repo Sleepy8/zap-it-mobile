@@ -67,7 +67,6 @@ class _CustomButtonState extends State<CustomButton>
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.limeAccent,
-                foregroundColor: AppTheme.primaryDark,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
                   vertical: 16,

@@ -16,6 +16,7 @@ import 'screens/privacy_settings_screen.dart';
 import 'screens/notification_settings_screen.dart';
 import 'screens/edit_profile_screen.dart';
 import 'screens/test_screen.dart';
+import 'screens/fallback_screen.dart';
 import 'firebase_init.dart';
 import 'services/background_service.dart';
 import 'services/auth_service.dart';
@@ -139,7 +140,7 @@ class ZapItApp extends StatelessWidget {
             otherUser: args['otherUser'],
           );
         },
-        '/fallback': (context) => const FallbackScreen(),
+        '/fallback': (context) => FallbackScreen(),
         '/privacy-settings': (context) => const PrivacySettingsScreen(),
         '/notification-settings': (context) => const NotificationSettingsScreen(),
         '/edit-profile': (context) => const EditProfileScreen(),

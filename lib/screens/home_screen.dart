@@ -119,9 +119,11 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.errorColor,
-              foregroundColor: Colors.white,
             ),
-            child: const Text('Rimuovi'),
+            child: const Text(
+              'Rimuovi',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),

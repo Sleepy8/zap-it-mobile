@@ -332,7 +332,6 @@ class _AddFriendModalState extends State<AddFriendModal> {
                   : () => _sendFriendRequest(user['id'], user['username']),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.limeAccent,
-                foregroundColor: AppTheme.primaryDark,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(18),
                 ),
@@ -352,6 +351,7 @@ class _AddFriendModalState extends State<AddFriendModal> {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 11,
+                        color: AppTheme.primaryDark,
                       ),
                     ),
             ),

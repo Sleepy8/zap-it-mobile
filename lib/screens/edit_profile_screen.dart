@@ -461,7 +461,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           onPressed: _changePassword,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.limeAccent,
-                            foregroundColor: AppTheme.primaryDark,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -472,6 +471,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 16,
+                              color: AppTheme.primaryDark,
                             ),
                           ),
                         ),

@@ -157,7 +157,6 @@ class _E2EESetupScreenState extends State<E2EESetupScreen> {
                     onPressed: _forceE2EEInitialization,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.limeAccent,
-                      foregroundColor: AppTheme.primaryDark,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -168,6 +167,7 @@ class _E2EESetupScreenState extends State<E2EESetupScreen> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
+                        color: AppTheme.primaryDark,
                       ),
                     ),
                   ),

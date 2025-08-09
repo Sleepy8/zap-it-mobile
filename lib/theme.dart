@@ -65,7 +65,7 @@ class AppTheme {
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: primaryDark,
-        foregroundColor: textPrimary,
+        titleTextStyle: TextStyle(color: textPrimary),
         elevation: 0,
         centerTitle: true,
         // Add more app bar properties for better compatibility
@@ -75,7 +75,6 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: limeAccent,
-          foregroundColor: primaryDark,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
@@ -83,6 +82,7 @@ class AppTheme {
           textStyle: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
+            color: primaryDark,
           ),
           // Add more button properties for better compatibility
           elevation: 2,

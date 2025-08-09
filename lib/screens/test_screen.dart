@@ -11,7 +11,7 @@ class TestScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Test Screen'),
         backgroundColor: AppTheme.primaryDark,
-        foregroundColor: AppTheme.textPrimary,
+        titleTextStyle: TextStyle(color: AppTheme.textPrimary),
       ),
       body: Container(
         width: double.infinity,
@@ -54,9 +54,11 @@ class TestScreen extends StatelessWidget {
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Button pressed!'),
+                    content: Text(
+                      'Button pressed!',
+                      style: TextStyle(color: AppTheme.primaryDark),
+                    ),
                     backgroundColor: AppTheme.limeAccent,
-                    foregroundColor: AppTheme.primaryDark,
                   ),
                 );
               },

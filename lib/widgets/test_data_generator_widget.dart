@@ -90,7 +90,6 @@ class _TestDataGeneratorWidgetState extends State<TestDataGeneratorWidget> {
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.surfaceDark,
-                    foregroundColor: AppTheme.primary,
                     side: BorderSide(color: AppTheme.primary),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -107,7 +106,6 @@ class _TestDataGeneratorWidgetState extends State<TestDataGeneratorWidget> {
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.surfaceDark,
-                    foregroundColor: AppTheme.primary,
                     side: BorderSide(color: AppTheme.primary),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -138,7 +136,6 @@ class _TestDataGeneratorWidgetState extends State<TestDataGeneratorWidget> {
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.surfaceDark,
-                foregroundColor: Colors.red,
                 side: BorderSide(color: Colors.red),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),

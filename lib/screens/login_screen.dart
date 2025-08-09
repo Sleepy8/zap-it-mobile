@@ -331,12 +331,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                 onPressed: _quickLoginMario,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.orange,
-                                  foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                 ),
                                 child: const Text(
                                   'Mario',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ),
@@ -346,12 +348,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                 onPressed: _quickLoginFrancesco,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                 ),
                                 child: const Text(
                                   'Francesco',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ),

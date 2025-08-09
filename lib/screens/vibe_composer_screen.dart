@@ -351,7 +351,6 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
-          foregroundColor: Colors.white,
           padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -363,13 +362,14 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: iconSize),
+            Icon(icon, size: iconSize, color: Colors.white),
             SizedBox(height: isSmallScreen ? 1 : 2),
             Text(
               label,
               style: TextStyle(
                 fontSize: fontSize,
                 fontWeight: FontWeight.w600,
+                color: Colors.white,
               ),
             ),
           ],
@@ -619,7 +619,6 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
           onPressed: onPressed,
           style: ElevatedButton.styleFrom(
             backgroundColor: color,
-            foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -628,13 +627,14 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
           ),
           child: Column(
             children: [
-              Icon(icon, size: 24),
+              Icon(icon, size: 24, color: Colors.white),
               const SizedBox(height: 4),
               Text(
                 label,
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
+                  color: Colors.white,
                 ),
               ),
             ],

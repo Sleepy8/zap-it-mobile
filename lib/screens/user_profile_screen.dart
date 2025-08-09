@@ -65,7 +65,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       appBar: AppBar(
         title: Text('@${widget.username}'),
         backgroundColor: AppTheme.surfaceDark,
-        foregroundColor: AppTheme.textPrimary,
+        titleTextStyle: TextStyle(color: AppTheme.textPrimary),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -261,7 +261,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           onPressed: () => _startChat(),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.limeAccent,
-                            foregroundColor: AppTheme.primaryDark,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -272,6 +271,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryDark,
                             ),
                           ),
                         ),
@@ -569,9 +569,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.errorColor,
-              foregroundColor: Colors.white,
             ),
-            child: const Text('Blocca'),
+            child: const Text(
+              'Blocca',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -615,9 +617,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.errorColor,
-              foregroundColor: Colors.white,
             ),
-            child: const Text('Segnala'),
+            child: const Text(
+              'Segnala',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
