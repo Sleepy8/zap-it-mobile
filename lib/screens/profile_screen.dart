@@ -662,21 +662,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             icon: Icons.edit,
                             title: 'Modifica Profilo',
                             onTap: () {
-                              // TODO: Implementare modifica profilo
+                              Navigator.pushNamed(context, '/edit-profile');
                             },
                           ),
                           _buildSettingItem(
                             icon: Icons.notifications,
                             title: 'Notifiche',
                             onTap: () {
-                              // TODO: Implementare impostazioni notifiche
+                              Navigator.pushNamed(context, '/notification-settings');
                             },
                           ),
                           _buildSettingItem(
                             icon: Icons.security,
                             title: 'Privacy',
                             onTap: () {
-                              // TODO: Implementare impostazioni privacy
+                              Navigator.pushNamed(context, '/privacy-settings');
                             },
                           ),
                         ],

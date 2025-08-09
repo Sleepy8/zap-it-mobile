@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'online_status_service.dart';
 
 abstract class AuthService {
   Future<bool> register(String email, String password, String username, String name);
@@ -70,12 +71,8 @@ class AuthServiceFirebaseImpl implements AuthService {
       );
 
       if (userCredential.user != null) {
-        // Update last seen
-        await _firestore.collection('users').doc(userCredential.user!.uid).update({
-          'lastSeen': FieldValue.serverTimestamp(),
-        });
-
-
+        // Set user as online
+        await OnlineStatusService().setOnline();
 
         return true;
       }
@@ -88,6 +85,8 @@ class AuthServiceFirebaseImpl implements AuthService {
   @override
   Future<void> logout() async {
     try {
+      // Set user as offline before logout
+      await OnlineStatusService().setOffline();
       await _auth.signOut();
 
     } catch (e) {

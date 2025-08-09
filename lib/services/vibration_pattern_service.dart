@@ -5,6 +5,15 @@ class VibrationPattern {
   String id;
   String name;
   List<int> pattern;
+  // Optional per-segment intensities (0-255). When provided, it should map to the
+  // number of ON segments in the pattern if the pattern is a full waveform
+  // [delay, on, off, on, ...]. If the pattern contains only ON durations,
+  // intensities should be 1:1 with pattern entries.
+  List<int>? intensities;
+  // Optional per-segment gaps (in ms). Each entry corresponds to the delay
+  // BEFORE the matching ON segment at the same index. The first gap is the
+  // initial delay from recording start.
+  List<int>? gaps;
   String color; // Stored as hex string
   DateTime createdAt;
   bool isDefault;
@@ -13,6 +22,8 @@ class VibrationPattern {
     required this.id,
     required this.name,
     required this.pattern,
+    this.intensities,
+    this.gaps,
     required this.color,
     required this.createdAt,
     this.isDefault = false,
@@ -23,6 +34,8 @@ class VibrationPattern {
       'id': id,
       'name': name,
       'pattern': pattern,
+      'intensities': intensities,
+      'gaps': gaps,
       'color': color,
       'createdAt': createdAt.toIso8601String(),
       'isDefault': isDefault,
@@ -34,6 +47,12 @@ class VibrationPattern {
       id: json['id'],
       name: json['name'],
       pattern: List<int>.from(json['pattern']),
+      intensities: json['intensities'] != null
+          ? List<int>.from(json['intensities'])
+          : null,
+      gaps: json['gaps'] != null
+          ? List<int>.from(json['gaps'])
+          : null,
       color: json['color'],
       createdAt: DateTime.parse(json['createdAt']),
       isDefault: json['isDefault'] ?? false,

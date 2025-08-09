@@ -18,14 +18,10 @@ class BackgroundService {
     if (_isRunning) return;
 
     try {
-      print('Starting background service...');
-
       // Initialize notification service with error handling
       try {
         await NotificationService().initialize();
-        print('Notification service initialized successfully');
       } catch (e) {
-        print('Notification service initialization failed: $e');
         // Continue without notifications
       }
 
@@ -35,10 +31,8 @@ class BackgroundService {
       }
 
       _isRunning = true;
-      print('Background service started successfully');
       
     } catch (e) {
-      print('Background service start error: $e');
       _isRunning = false;
     }
   }
@@ -46,15 +40,11 @@ class BackgroundService {
   // Stop background service
   void stop() {
     try {
-      print('Stopping background service...');
-      
       _keepAliveTimer?.cancel();
       _isRunning = false;
       
-      print('Background service stopped successfully');
-      
     } catch (e) {
-      print('Background service stop error: $e');
+      // Silent error handling
     }
   }
 
@@ -64,11 +54,10 @@ class BackgroundService {
     
     _keepAliveTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
       try {
-        print('Background service keep-alive ping');
         // Send a silent ping to keep the service alive
         _sendKeepAlivePing();
       } catch (e) {
-        print('Keep-alive timer error: $e');
+        // Silent error handling
       }
     });
   }
@@ -77,7 +66,6 @@ class BackgroundService {
   void _sendKeepAlivePing() {
     // This is a simple ping to keep the background service active
     // In a real app, you might want to send a heartbeat to your server
-    print('Keep-alive ping sent');
   }
 
   // Check if service is running

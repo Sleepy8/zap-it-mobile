@@ -1,0 +1,103 @@
+{
+  "tech_stack": [
+    "Dart",
+    "Flutter",
+    "Firebase",
+    "Firestore",
+    "FirebaseAuth",
+    "Cloud Functions"
+  ],
+  "features": [
+    {
+      "name": "Authentication System",
+      "description": "Sistema di autenticazione completo con Firebase Auth, registrazione, login e gestione profilo utente",
+      "files": [
+        "lib/services/auth_service.dart",
+        "lib/services/auth_service_firebase_impl.dart",
+        "lib/services/auth_service_firebase.dart",
+        "lib/services/auth_service_mock.dart",
+        "lib/screens/login_screen.dart",
+        "lib/screens/register_screen.dart",
+        "lib/screens/profile_screen.dart"
+      ]
+    },
+    {
+      "name": "Friends Management",
+      "description": "Gestione completa delle amicizie: invio richieste, accettazione, rifiuto e rimozione",
+      "files": [
+        "lib/services/friends_service.dart",
+        "lib/screens/friend_requests_screen.dart",
+        "lib/widgets/add_friend_modal.dart"
+      ]
+    },
+    {
+      "name": "Home Screen",
+      "description": "Schermata principale che mostra amici, richieste pendenti e attività recenti",
+      "files": [
+        "lib/screens/home_screen.dart",
+        "lib/widgets/bottom_navigation.dart"
+      ]
+    },
+    {
+      "name": "Zap System",
+      "description": "Sistema di invio zaps con notifiche, vibrazioni e pattern personalizzati",
+      "files": [
+        "lib/screens/vibe_composer_screen.dart",
+        "lib/services/vibration_pattern_service.dart",
+        "lib/widgets/zap_send_modal.dart",
+        "lib/widgets/zap_notification.dart",
+        "lib/widgets/zap_success_toast.dart"
+      ]
+    },
+    {
+      "name": "Messaging",
+      "description": "Sistema di messaggistica tra utenti con crittografia end-to-end",
+      "files": [
+        "lib/screens/messages_screen.dart",
+        "lib/services/messages_service.dart",
+        "lib/screens/e2ee_setup_screen.dart"
+      ]
+    },
+    {
+      "name": "Notifications",
+      "description": "Sistema di notifiche push e gestione impostazioni",
+      "files": [
+        "lib/services/notification_service.dart",
+        "lib/screens/notification_settings_screen.dart"
+      ]
+    },
+    {
+      "name": "Leaderboard",
+      "description": "Classifica utenti basata su zaps inviati e ricevuti",
+      "files": [
+        "lib/screens/leaderboard_screen.dart"
+      ]
+    },
+    {
+      "name": "Test Data Generator",
+      "description": "Sistema per generare dati di test con utenti italiani per sviluppo e testing",
+      "files": [
+        "lib/utils/test_data_generator.dart",
+        "lib/utils/run_test_data_generator.dart"
+      ]
+    },
+    {
+      "name": "Background Services",
+      "description": "Servizi in background per gestione stato online e notifiche",
+      "files": [
+        "lib/services/background_service.dart",
+        "lib/services/online_status_service.dart"
+      ]
+    },
+    {
+      "name": "UI Components",
+      "description": "Widget personalizzati per l'interfaccia utente",
+      "files": [
+        "lib/widgets/profile_picture.dart",
+        "lib/widgets/custom_button.dart",
+        "lib/widgets/badge_icon.dart",
+        "lib/widgets/animated_logo.dart"
+      ]
+    }
+  ]
+} 

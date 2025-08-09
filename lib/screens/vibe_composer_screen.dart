@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import 'package:vibration/vibration.dart';
 import 'dart:math' as Math;
 import '../theme.dart';
@@ -18,6 +19,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
   final VibrationPatternService _patternService = VibrationPatternService();
   List<int> _currentPattern = [];
   List<int> _currentIntensities = []; // Nuovo: lista delle intensità
+  List<int> _currentGaps = []; // Gap (ms) PRIMA di ogni segmento (il primo è il delay iniziale)
   bool _isRecording = false;
   bool _isPlaying = false;
   late AnimationController _animationController;
@@ -27,6 +29,25 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
   DateTime? _recordingStartTime;
   DateTime? _vibrationStartTime;
   bool _isVibrating = false;
+  Timer? _vibrationTimer;
+  int _lastIntensity = 200;
+  DateTime? _lastReleaseTime; // per misurare gap tra pressioni separate
+  // Recording segmentation for precise duration and intensity tracking
+  DateTime? _segmentStartTime;
+  int _segmentCurrentIntensity = 128;
+  // Live vibration refresh strategy to keep continuous feeling (no perceivable gaps)
+  static const int _liveChunkMs = 400; // chunk duration we (re)issue
+  static const int _liveRefreshMs = 150; // refresh rate to overlap chunks
+  // PWM fallback constants for playback on devices without amplitude control
+  static const double _dutyMin = 0.35;
+  static const int _microPeriodMs = 80;
+  static const int _minOnMs = 30;
+  bool _hasAmplitudeControl = false;
+  bool _hasVibrator = true;
+
+  static const int _minSegmentMs = 30; // minimum duration per segment to register
+  static const int _intensityChangeThreshold = 12; // change needed to split segment
+  static const int _minTapGapMs = 40; // minimum OFF gap between separate taps
 
   @override
   void initState() {
@@ -39,6 +60,18 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     _loadSavedPatterns();
+    _detectVibrationCapabilities();
+  }
+
+  Future<void> _detectVibrationCapabilities() async {
+    try {
+      _hasVibrator = await Vibration.hasVibrator() ?? true;
+      _hasAmplitudeControl = await Vibration.hasAmplitudeControl() ?? false;
+    } catch (_) {
+      _hasVibrator = true;
+      _hasAmplitudeControl = false;
+    }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -264,29 +297,35 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
           _buildSmallControlButton(
             icon: _isPlaying ? Icons.stop_rounded : Icons.play_arrow_rounded,
             label: _isPlaying ? 'Stop' : 'Play',
-            onPressed: _isPlaying ? _stopPlaying : _playPattern,
-            color: _isPlaying ? Colors.red : Colors.green,
+            onPressed: () {
+              if (_isPlaying) {
+                _stopPlaying();
+              } else {
+                _playPattern();
+              }
+            },
+            color: _isPlaying ? AppTheme.buttonDanger : AppTheme.buttonSuccess,
             isSmallScreen: isSmallScreen,
           ),
           _buildSmallControlButton(
             icon: Icons.fiber_manual_record_rounded,
             label: 'Record',
             onPressed: _toggleRecording,
-            color: _isRecording ? Colors.red : Colors.orange,
+            color: _isRecording ? AppTheme.buttonDanger : AppTheme.buttonWarning,
             isSmallScreen: isSmallScreen,
           ),
           _buildSmallControlButton(
             icon: Icons.add_rounded,
             label: 'Create',
             onPressed: _createManualPattern,
-            color: Colors.blue,
+            color: AppTheme.buttonAccent,
             isSmallScreen: isSmallScreen,
           ),
           _buildSmallControlButton(
             icon: Icons.save_rounded,
             label: 'Save',
             onPressed: _saveCurrentPattern,
-            color: Colors.purple,
+            color: AppTheme.buttonSecondary,
             isSmallScreen: isSmallScreen,
           ),
         ],
@@ -373,8 +412,11 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     final renderBox = context.findRenderObject() as RenderBox;
     final localPosition = renderBox.globalToLocal(details.globalPosition);
     
-    // Aggiorna l'intensità in tempo reale durante il trascinamento
+    // Aggiorna l'intensità in tempo reale durante il trascinamento - MIGLIORATA LA REATTIVITÀ
     _updateVibrationIntensity(localPosition);
+    
+    // NON registrare impulsi intermedi durante il trascinamento - la vibrazione continua
+    // verrà registrata solo quando si rilascia il dito
   }
 
   void _onVisualizerPanEnd(DragEndDetails details) {
@@ -383,11 +425,15 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     _stopInteractiveRecording(null);
   }
 
+  // RIMOSSO IL METODO _recordIntermediateImpulse - non serve più
+
   void _startRecording() {
     setState(() {
       _currentPattern.clear();
       _currentIntensities.clear(); // Pulisci anche le intensità
+      _currentGaps.clear();
       _recordingStartTime = DateTime.now();
+      _lastReleaseTime = null;
     });
     
     // Rimossa la notifica per rendere l'app più fluida
@@ -403,45 +449,110 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
       _vibrationStartTime = DateTime.now();
     });
     
-    // Calcola l'intensità basata sulla posizione Y
+    // Calcola l'intensità basata sulla posizione Y - MIGLIORATA LA SENSIBILITÀ
     final intensity = _calculateIntensityFromPosition(position);
+    _lastIntensity = intensity;
+    _segmentStartTime = DateTime.now();
+    _segmentCurrentIntensity = intensity;
+    // Registra gap (off) PRIMA del segmento corrente
+    final now = DateTime.now();
+    int gapMs = 0;
+    if (_lastReleaseTime != null) {
+      gapMs = now.difference(_lastReleaseTime!).inMilliseconds;
+    } else if (_recordingStartTime != null && _currentPattern.isEmpty) {
+      gapMs = now.difference(_recordingStartTime!).inMilliseconds;
+    }
+    // Impedisci gap troppo piccoli che si attaccano al segmento precedente
+    _currentGaps.add(gapMs < _minTapGapMs ? _minTapGapMs : gapMs.clamp(0, 10000));
     
-    // Gestione specifica per piattaforma
+    // Gestione specifica per piattaforma - AUMENTATA DRASTICAMENTE L'INTENSITÀ
     if (PlatformService.isAndroid) {
-      // Android: vibrazione diretta
-      Vibration.vibrate(duration: 200, amplitude: intensity);
+      // Android: avvia un keep-alive della vibrazione finché il dito resta giù
+      if (_hasAmplitudeControl) {
+        Vibration.vibrate(duration: _liveChunkMs, amplitude: intensity);
+      } else {
+        Vibration.vibrate(duration: _liveChunkMs);
+      }
+      _vibrationTimer?.cancel();
+      _vibrationTimer = Timer.periodic(const Duration(milliseconds: _liveRefreshMs), (_) async {
+        if (_isVibrating) {
+          if (_hasAmplitudeControl) {
+            final a = _lastIntensity.clamp(1, 255);
+            Vibration.vibrate(duration: _liveChunkMs, amplitude: a);
+          } else {
+            Vibration.vibrate(duration: _liveChunkMs);
+          }
+        }
+      });
     } else if (PlatformService.isIOS) {
       // iOS: haptic feedback
       _triggerHapticFeedback(intensity);
+      _vibrationTimer?.cancel();
+      _vibrationTimer = Timer.periodic(const Duration(milliseconds: 70), (_) {
+        if (_isVibrating) {
+          _triggerHapticFeedback(_lastIntensity);
+        }
+      });
     }
-    
-    
   }
 
   void _updateVibrationIntensity(Offset position) {
     final intensity = _calculateIntensityFromPosition(position);
+    _lastIntensity = intensity;
+
+    // Split current segment if intensity changed enough and minimum time elapsed
+    if (_segmentStartTime != null) {
+      final elapsed = DateTime.now().difference(_segmentStartTime!).inMilliseconds;
+      if (elapsed >= _minSegmentMs && (intensity - _segmentCurrentIntensity).abs() >= _intensityChangeThreshold) {
+        final segmentDuration = elapsed.clamp(5, 6000);
+        setState(() {
+          // micro-gap per separare nettamente il cambio intensità
+          if (_currentGaps.length == _currentPattern.length) {
+            _currentGaps.add(10);
+          }
+          _currentPattern.add(segmentDuration);
+          _currentIntensities.add(_segmentCurrentIntensity);
+          _segmentStartTime = DateTime.now();
+          _segmentCurrentIntensity = intensity;
+        });
+      }
+    }
     
-    // Gestione specifica per piattaforma
+    // Gestione specifica per piattaforma - AUMENTATA DRASTICAMENTE L'INTENSITÀ
     if (PlatformService.isAndroid) {
-      // Android: aggiorna vibrazione in tempo reale
-      Vibration.vibrate(duration: 50, amplitude: intensity);
+      // Android: aggiorna vibrazione in tempo reale con intensità molto più alta
+      // Usa una durata più lunga per vibrazioni continue durante il trascinamento
+      if (_hasAmplitudeControl) {
+        Vibration.vibrate(duration: _liveChunkMs, amplitude: intensity); // rinnova con chunk sovrapposti
+      } else {
+        // Mantieni vibrazione continua senza duty-cycle per evitare pulsazioni
+        Vibration.vibrate(duration: _liveChunkMs);
+      }
     } else if (PlatformService.isIOS) {
       // iOS: aggiorna haptic feedback
       _triggerHapticFeedback(intensity);
     }
-    
-    
   }
 
   void _triggerHapticFeedback(int intensity) {
     if (PlatformService.isIOS) {
-      // Converti intensità in tipo di haptic feedback
-      if (intensity > 200) {
+      // Converti intensità in tipo di haptic feedback - AUMENTATA LA SENSIBILITÀ
+      if (intensity > 180) {
         HapticFeedback.heavyImpact();
-      } else if (intensity > 100) {
+        // Aggiungi un secondo feedback per intensità molto alte
+        Future.delayed(Duration(milliseconds: 10), () {
+          HapticFeedback.heavyImpact();
+        });
+      } else if (intensity > 120) {
         HapticFeedback.mediumImpact();
-      } else {
+        // Aggiungi un secondo feedback per intensità medie
+        Future.delayed(Duration(milliseconds: 10), () {
+          HapticFeedback.mediumImpact();
+        });
+      } else if (intensity > 60) {
         HapticFeedback.lightImpact();
+      } else {
+        HapticFeedback.selectionClick(); // Feedback più sottile per intensità basse
       }
     }
   }
@@ -450,42 +561,49 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     setState(() {
       _isVibrating = false;
     });
+    _vibrationTimer?.cancel();
+    _vibrationTimer = null;
     
-    // Calcola la durata e l'intensità
-    if (_vibrationStartTime != null) {
-      final duration = DateTime.now().difference(_vibrationStartTime!).inMilliseconds;
-      final intensity = position != null ? _calculateIntensityFromPosition(position) : 128;
-      
-      // Crea l'impulso con intensità personalizzata
-      final impulseDuration = duration.clamp(50, 1000);
-      final impulseIntensity = intensity;
-      
-      setState(() {
-        _currentPattern.add(impulseDuration);
-        _currentIntensities.add(impulseIntensity); // Salva l'intensità
-        
-      });
-      
-      // Rimossa la notifica per rendere l'app più fluida
+    // Chiudi l'ultimo segmento in corso
+    if (_segmentStartTime != null) {
+      final elapsed = DateTime.now().difference(_segmentStartTime!).inMilliseconds;
+      final duration = elapsed.clamp(5, 6000);
+      if (duration >= 5) {
+        setState(() {
+          _currentPattern.add(duration);
+          _currentIntensities.add(_segmentCurrentIntensity);
+        });
+      }
+      _segmentStartTime = null;
     }
     
     _vibrationStartTime = null;
+    _lastReleaseTime = DateTime.now();
   }
 
   int _calculateIntensityFromPosition(Offset position) {
     // Ottieni l'altezza del visualizzatore in base alla dimensione dello schermo
     final screenHeight = MediaQuery.of(context).size.height;
     final isSmallScreen = screenHeight < 700;
-    final visualizerHeight = isSmallScreen ? 160.0 : 220.0; // Aggiornato per la nuova altezza
+    final visualizerHeight = isSmallScreen ? 160.0 : 220.0;
     
     // Normalizza la posizione Y (0 = alto/soft, 1 = basso/hard)
     final normalizedY = position.dy / visualizerHeight;
     
-    // Inverti la scala (0 = soft, 1 = hard)
+    // Inverti la scala (0 = soft, 1 = hard) - AUMENTATA DRASTICAMENTE LA CURVA DI INTENSITÀ
     final intensity = (1.0 - normalizedY).clamp(0.0, 1.0);
     
-    // Converti in valore per Vibration API (1-255)
-    return (intensity * 255).round();
+    // Converti in valore per Vibration API (1-255) - AUMENTATA DRASTICAMENTE L'INTENSITÀ BASE
+    final baseIntensity = (intensity * 255).round();
+    
+    // Applica una curva molto più aggressiva per intensità più alte
+    if (baseIntensity > 128) {
+      return (baseIntensity * 1.8).round().clamp(0, 255); // Aumenta dell'80% per intensità alte
+    } else if (baseIntensity > 64) {
+      return (baseIntensity * 1.4).round().clamp(0, 255); // Aumenta del 40% per intensità medie
+    } else {
+      return (baseIntensity * 1.2).round().clamp(0, 255); // Aumenta del 20% anche per intensità basse
+    }
   }
 
   Widget _buildControlButton({
@@ -623,7 +741,14 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
-                      onPressed: () => _playPattern(pattern.pattern),
+                      onPressed: () => _playPattern(
+                        pattern.pattern,
+                        // se non ci sono intensità salvate, usa valori alti di default
+                        (pattern.intensities != null && pattern.intensities!.isNotEmpty)
+                            ? pattern.intensities
+                            : List<int>.filled(pattern.pattern.length, 220),
+                        pattern.gaps,
+                      ),
                       icon: Icon(
                         Icons.play_arrow_rounded,
                         color: Color(int.parse('0xFF${pattern.color.substring(1)}')),
@@ -658,10 +783,20 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     );
   }
 
-  void _playPattern([List<int>? pattern]) async {
+  void _playPattern([List<int>? pattern, List<int>? intensities, List<int>? gaps]) async {
     final patternToPlay = pattern ?? _currentPattern;
+    final intensitiesToPlay = intensities ?? (
+      _currentIntensities.length == patternToPlay.length
+        ? _currentIntensities
+        : List<int>.filled(patternToPlay.length, 220)
+    );
+    final gapsToPlay = gaps ?? (
+      _currentGaps.length == patternToPlay.length
+        ? _currentGaps
+        : _synthesizeGaps(patternToPlay.length)
+    );
     if (patternToPlay.isEmpty) {
-      return; // Rimossa la notifica per rendere l'app più fluida
+      return;
     }
 
     setState(() {
@@ -672,42 +807,102 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
 
     try {
       if (PlatformService.isAndroid) {
-        // Android: usa Vibration API
-        if (await Vibration.hasVibrator() ?? false) {
-          // Se abbiamo intensità personalizzate, usale
-          if (_currentIntensities.isNotEmpty && _currentIntensities.length == patternToPlay.length) {
-            // Crea pattern con intensità personalizzate
-            final patternWithIntensity = <int>[];
+        // Android: usa Vibration API con intensità per-segmento se disponibili
+        final hasVibrator = await Vibration.hasVibrator() ?? false;
+        if (hasVibrator) {
+          final hasAmplitude = await Vibration.hasAmplitudeControl() ?? false;
+
+          // Costruisci pattern completo [gap0, on1, gap1, on2, ...]
+          final fullPattern = <int>[];
+          final fullIntensities = <int>[];
+          // delay iniziale/gap0
+          fullPattern.add(gapsToPlay.isNotEmpty ? gapsToPlay.first.clamp(0, 10000) : 0);
+          fullIntensities.add(0);
+
+          for (int i = 0; i < patternToPlay.length; i++) {
+            final rawDuration = patternToPlay[i];
+            final onDuration = rawDuration.clamp(5, 6000); // durata precisa
+            fullPattern.add(onDuration);
+
+            // ampiezza: usa intensità se disponibile, alza un floor minimo
+            int amplitude = (i < intensitiesToPlay.length ? intensitiesToPlay[i] : 220);
+            amplitude = amplitude.clamp(1, 255);
+            fullIntensities.add(amplitude);
+
+            // gap tra impulsi (come registrato)
+            final gap = (i + 1 < gapsToPlay.length) ? gapsToPlay[i + 1].clamp(0, 10000) : 0;
+            if (i < patternToPlay.length - 1) {
+              fullPattern.add(gap);
+              fullIntensities.add(0);
+            }
+          }
+
+          if (hasAmplitude) {
+            await Vibration.vibrate(pattern: fullPattern, intensities: fullIntensities);
+          } else {
+            // Senza amplitude control: espandi ogni segmento in micro-cicli PWM per emulare l'intensità
+            final pwmPattern = <int>[];
+            // iniziale
+            pwmPattern.add(gapsToPlay.isNotEmpty ? gapsToPlay.first.clamp(0, 10000) : 0);
             for (int i = 0; i < patternToPlay.length; i++) {
-              patternWithIntensity.add(patternToPlay[i]);
-              if (i < _currentIntensities.length) {
-                // Aggiungi una pausa basata sull'intensità (più intenso = meno pausa)
-                final pause = (255 - _currentIntensities[i]) ~/ 10; // 0-25ms di pausa
-                if (pause > 0) patternWithIntensity.add(pause);
+              final segMs = patternToPlay[i].clamp(5, 6000);
+              final norm = ((i < intensitiesToPlay.length ? intensitiesToPlay[i] : 220) / 255.0).clamp(0.0, 1.0);
+              final duty = (_dutyMin + norm * (1.0 - _dutyMin)).clamp(_dutyMin, 1.0);
+              final onMs = (_microPeriodMs * duty).round().clamp(_minOnMs, _microPeriodMs);
+              final offMs = (_microPeriodMs - onMs).clamp(0, _microPeriodMs);
+
+              int remaining = segMs is int ? segMs : (segMs as num).round();
+              while (remaining > 0) {
+                final onChunk = remaining >= onMs ? onMs : remaining;
+                pwmPattern.add(onChunk);
+                remaining -= onChunk;
+                if (remaining <= 0) break;
+                if (offMs > 0) {
+                  final offChunk = remaining >= offMs ? offMs : remaining;
+                  pwmPattern.add(offChunk);
+                  remaining -= offChunk;
+                }
+              }
+              // gap tra segmenti
+              if (i + 1 < gapsToPlay.length) {
+                pwmPattern.add(gapsToPlay[i + 1].clamp(0, 10000));
               }
             }
-            await Vibration.vibrate(pattern: patternWithIntensity);
-          } else {
-            await Vibration.vibrate(pattern: patternToPlay);
+            await Vibration.vibrate(pattern: pwmPattern);
           }
-          
         }
       } else if (PlatformService.isIOS) {
-        // iOS: usa haptic feedback per ogni impulso
+        // iOS: usa haptic feedback per ogni impulso - AUMENTATA MASSIVAMENTE LA RIPRODUZIONE
         for (int i = 0; i < patternToPlay.length; i++) {
-          final intensity = i < _currentIntensities.length ? _currentIntensities[i] : 128;
-          _triggerHapticFeedback(intensity);
+          final intensity = i < intensitiesToPlay.length ? intensitiesToPlay[i] : 128;
+          
+          // Ripeti il feedback per intensità più alte - AUMENTATO DRASTICAMENTE IL RIPETERE
+          final repeatCount = intensity > 180 ? 5 : (intensity > 120 ? 3 : (intensity > 60 ? 2 : 1));
+          for (int j = 0; j < repeatCount; j++) {
+            _triggerHapticFeedback(intensity);
+            if (j < repeatCount - 1) {
+              await Future.delayed(Duration(milliseconds: 2)); // Pausa molto breve tra ripetizioni
+            }
+          }
           
           // Attendi la durata dell'impulso
           await Future.delayed(Duration(milliseconds: patternToPlay[i]));
         }
-        
       }
     } catch (e) {
-      
+      // Gestione errori silenziosa
     }
 
-    Future.delayed(Duration(milliseconds: patternToPlay.fold(0, (a, b) => a + b)), () {
+    // Calcola durata totale reale usata in playback (inclusi gap)
+    int totalMs;
+    // Ricostruisci durata totale (Android/iOS): somma gap + on
+    totalMs = 0;
+    if (gapsToPlay.isNotEmpty) totalMs += gapsToPlay.first.clamp(0, 10000);
+    for (int i = 0; i < patternToPlay.length; i++) {
+      totalMs += patternToPlay[i].clamp(5, 6000);
+      if (i + 1 < gapsToPlay.length) totalMs += gapsToPlay[i + 1].clamp(0, 10000);
+    }
+    Future.delayed(Duration(milliseconds: totalMs), () {
       if (mounted) {
         setState(() {
           _isPlaying = false;
@@ -819,6 +1014,8 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
       pattern: List.from(_currentPattern),
+      intensities: List.from(_currentIntensities),
+      gaps: List.from(_currentGaps),
       color: '#${AppTheme.limeAccent.value.toRadixString(16).substring(2)}',
       createdAt: DateTime.now(),
     );
@@ -837,6 +1034,12 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
   void _loadPattern(VibrationPattern pattern) {
     setState(() {
       _currentPattern = List.from(pattern.pattern);
+      _currentIntensities = pattern.intensities != null && pattern.intensities!.isNotEmpty
+          ? List.from(pattern.intensities!)
+          : List<int>.filled(pattern.pattern.length, 220);
+      _currentGaps = pattern.gaps != null && pattern.gaps!.isNotEmpty
+          ? List.from(pattern.gaps!)
+          : _synthesizeGaps(_currentPattern.length);
       _selectedPattern = pattern;
     });
 
@@ -906,6 +1109,8 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
                           final values = text.split(',').map((e) => int.parse(e.trim())).toList();
                           setState(() {
                             _currentPattern = values;
+                            _currentIntensities = List<int>.filled(values.length, 220);
+                            _currentGaps = _synthesizeGaps(values.length);
                           });
                           Navigator.pop(context);
                           // Rimossa la notifica per rendere l'app più fluida
@@ -932,6 +1137,17 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
         ],
       ),
     );
+  }
+
+  // Genera gap sintetici se mancanti (0 iniziale + 60ms tra impulsi)
+  List<int> _synthesizeGaps(int segments) {
+    if (segments <= 0) return [];
+    final List<int> gaps = [];
+    gaps.add(0);
+    for (int i = 1; i < segments; i++) {
+      gaps.add(60);
+    }
+    return gaps;
   }
 
   void _saveCurrentPattern() {

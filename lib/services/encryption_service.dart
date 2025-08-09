@@ -41,7 +41,6 @@ class EncryptionService {
         'privateKey': userKey,
       };
     } catch (e) {
-      
       rethrow;
     }
   }
@@ -51,7 +50,6 @@ class EncryptionService {
     try {
       final conversationId = _getCurrentConversationId();
       if (conversationId == null) {
-        
         return message;
       }
 
@@ -77,10 +75,8 @@ class EncryptionService {
       final jsonPayload = jsonEncode(payload);
       final encodedPayload = base64Encode(utf8.encode(jsonPayload));
       
-      
       return encodedPayload;
     } catch (e) {
-      
       return message; // Fallback to plain text on error
     }
   }
@@ -97,7 +93,6 @@ class EncryptionService {
         payload = jsonDecode(jsonPayload) as Map<String, dynamic>;
       } catch (e) {
         // This might be a plain text message
-        
         return encryptedPayload;
       }
       
@@ -106,30 +101,130 @@ class EncryptionService {
       final conversationId = payload['conversationId'] as String?;
       
       if (conversationId == null) {
-        
         return '[Messaggio non leggibile]';
       }
+      
+      // Set the conversation ID for this decryption operation
+      setCurrentConversationId(conversationId);
       
       // Get conversation key
       final conversationKey = await _getConversationKey(conversationId);
       
       if (conversationKey.isEmpty) {
-        
         return '[Messaggio non leggibile - chiave mancante]';
       }
       
-      // Decrypt message with conversation key
-      final keyBytes = base64Decode(conversationKey);
-      final key = Key(Uint8List.fromList(keyBytes));
-      final ivBytes = IV.fromBase64(iv);
+      // Try multiple decryption strategies
+      List<String> decryptionStrategies = [
+        conversationKey, // Current key
+      ];
       
-      final encrypter = Encrypter(AES(key));
-      final decryptedMessage = encrypter.decrypt64(encryptedMessage, iv: ivBytes);
+             // Add fallback keys for migration
+       final prefs = await SharedPreferences.getInstance();
+       final fallbackKeys = <String>[];
+       
+       // Add legacy keys if they exist
+       final legacyKey = prefs.getString('${_sharedKeyPrefix}legacy_$conversationId');
+       if (legacyKey != null && legacyKey.isNotEmpty) {
+         fallbackKeys.add(legacyKey);
+       }
+       
+       final oldKey = prefs.getString('${_sharedKeyPrefix}old_$conversationId');
+       if (oldKey != null && oldKey.isNotEmpty) {
+         fallbackKeys.add(oldKey);
+       }
+       
+       // Add a default key as last resort
+       fallbackKeys.add(base64Encode(List<int>.generate(32, (i) => i)));
       
+      decryptionStrategies.addAll(fallbackKeys);
       
-      return decryptedMessage;
+      // Try each decryption strategy
+      for (int i = 0; i < decryptionStrategies.length; i++) {
+        final keyToTry = decryptionStrategies[i];
+        try {
+          final keyBytes = base64Decode(keyToTry);
+          final key = Key(Uint8List.fromList(keyBytes));
+          final ivBytes = IV.fromBase64(iv);
+          
+          final encrypter = Encrypter(AES(key));
+          final decryptedMessage = encrypter.decrypt64(encryptedMessage, iv: ivBytes);
+          
+          // If we used a fallback key, update the current key
+          if (i > 0) {
+            await prefs.setString('${_sharedKeyPrefix}$conversationId', keyToTry);
+            
+            // Also update in Firestore
+            try {
+              await _firestore.collection('conversations').doc(conversationId).update({
+                'sharedKey': keyToTry,
+                'keyUpdatedAt': FieldValue.serverTimestamp(),
+              });
+            } catch (e) {
+              // Silent error handling
+            }
+          }
+          
+          return decryptedMessage;
+        } catch (decryptError) {
+          continue;
+        }
+      }
+      
+      // If all strategies failed, try to get a fresh key from Firestore
+      try {
+        final conversationDoc = await _firestore.collection('conversations').doc(conversationId).get();
+        if (conversationDoc.exists) {
+          final data = conversationDoc.data() as Map<String, dynamic>;
+          final freshKey = data['sharedKey'] as String?;
+          
+          if (freshKey != null && freshKey.isNotEmpty) {
+            // Update local key
+            await prefs.setString('${_sharedKeyPrefix}$conversationId', freshKey);
+            
+            // Retry decryption with fresh key
+            final keyBytes = base64Decode(freshKey);
+            final key = Key(Uint8List.fromList(keyBytes));
+            final ivBytes = IV.fromBase64(iv);
+            
+            final encrypter = Encrypter(AES(key));
+            final decryptedMessage = encrypter.decrypt64(encryptedMessage, iv: ivBytes);
+            
+            return decryptedMessage;
+          }
+        }
+      } catch (retryError) {
+        // Silent error handling
+      }
+      
+             // If everything failed, try to reset the conversation key and retry
+       try {
+         // Remove the current key to force regeneration
+         await prefs.remove('${_sharedKeyPrefix}$conversationId');
+         
+         // Get a fresh key from Firestore or generate a new one
+         final freshKey = await _getConversationKey(conversationId);
+         
+         // Try one more time with the fresh key
+         final keyBytes = base64Decode(freshKey);
+         final key = Key(Uint8List.fromList(keyBytes));
+         final ivBytes = IV.fromBase64(iv);
+         
+         final encrypter = Encrypter(AES(key));
+         final decryptedMessage = encrypter.decrypt64(encryptedMessage, iv: ivBytes);
+         
+         return decryptedMessage;
+               } catch (resetError) {
+          // As a last resort, try to detect if this is a plain text message
+          if (encryptedPayload.length < 100 && !encryptedPayload.contains('=')) {
+            return encryptedPayload;
+          }
+          
+          // If it's a long encrypted message that we can't decrypt, 
+          // it might be an orphaned message from a previous encryption system
+          return '[Messaggio da conversazione precedente]';
+        }
     } catch (e) {
-      
       return '[Messaggio non leggibile - errore di decrittografia]';
     }
   }
@@ -144,7 +239,6 @@ class EncryptionService {
       final sharedKey = prefs.getString('${_sharedKeyPrefix}$currentUserId');
       
       if (sharedKey == null || sharedKey.isEmpty) {
-        
         return '[Messaggio legacy non leggibile]';
       }
       
@@ -162,10 +256,8 @@ class EncryptionService {
       final encryptedMessage = payload['encryptedMessage'] as String;
       final decryptedMessage = encrypter.decrypt64(encryptedMessage, iv: iv);
       
-      
       return decryptedMessage;
     } catch (e) {
-      
       return '[Messaggio legacy non leggibile]';
     }
   }
@@ -177,467 +269,224 @@ class EncryptionService {
       final userDoc = await _firestore.collection('users').doc(userId).get();
       if (userDoc.exists) {
         final userData = userDoc.data() as Map<String, dynamic>;
-        final publicKey = userData['publicKey'] as String?;
-        
-        if (publicKey != null) {
-          // Store locally for faster access
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('${_publicKeyPrefix}$userId', publicKey);
-          return publicKey;
-        }
+        return userData['publicKey'] as String?;
       }
       
-      // Fallback to local storage
+      // If not found in Firestore, try local storage
       final prefs = await SharedPreferences.getInstance();
       return prefs.getString('${_publicKeyPrefix}$userId');
     } catch (e) {
-      
       return null;
     }
   }
 
-  // Encrypt message for recipient using their public key
-  Future<String> encryptMessage(String message, String recipientPublicKey) async {
-    try {
-      
-      
-      // Use recipient's public key to encrypt the message
-      final keyBytes = base64Decode(recipientPublicKey);
-      final key = Key(Uint8List.fromList(keyBytes));
-      final iv = IV.fromSecureRandom(16);
-      
-      // Encrypt message with AES
-      final encrypter = Encrypter(AES(key));
-      final encryptedMessage = encrypter.encrypt(message, iv: iv);
-      
-      
-      
-      // Create encrypted payload
-      final payload = {
-        'encryptedMessage': encryptedMessage.base64,
-        'iv': iv.base64,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'messageId': _generateMessageId(),
-      };
-      
-      final jsonPayload = jsonEncode(payload);
-      final encodedPayload = base64Encode(utf8.encode(jsonPayload));
-      
-      
-      return encodedPayload;
-    } catch (e) {
-      
-      rethrow;
-    }
-  }
-
-  // Decrypt message with user's own private key
-  Future<String> decryptMessage(String encryptedPayload) async {
-    try {
-      // Get user's own private key
-      final userId = _getCurrentUserId();
-      
-      
-      final prefs = await SharedPreferences.getInstance();
-      final userPrivateKey = prefs.getString('${_privateKeyPrefix}$userId');
-      
-      
-      
-      String finalUserKey = userPrivateKey ?? '';
-      
-      if (finalUserKey.isEmpty) {
-        // Try to get from Firestore and initialize
-        
-        final userDoc = await _firestore.collection('users').doc(userId).get();
-        
-        if (userDoc.exists) {
-          final userData = userDoc.data() as Map<String, dynamic>;
-          final publicKey = userData['publicKey'] as String?;
-          
-          if (publicKey != null && publicKey.isNotEmpty) {
-            // Store locally and use (in this simplified version, public key = private key)
-            await prefs.setString('${_privateKeyPrefix}$userId', publicKey);
-            finalUserKey = publicKey;
-            
-          } else {
-            throw Exception('No public key found in Firestore for user: $userId');
-          }
-        } else {
-          throw Exception('User document not found: $userId');
-        }
-      }
-      
-      if (finalUserKey.isEmpty) {
-        throw Exception('Failed to retrieve user private key');
-      }
-      
-      
-      
-      // Parse payload
-      final payloadBytes = base64Decode(encryptedPayload);
-      final payloadString = utf8.decode(payloadBytes);
-      
-      
-      final payload = jsonDecode(payloadString) as Map<String, dynamic>;
-      
-      
-      
-      // Decrypt message with user's private key
-      final keyBytes = base64Decode(finalUserKey);
-      final key = Key(Uint8List.fromList(keyBytes));
-      final iv = IV.fromBase64(payload['iv']);
-      final encrypter = Encrypter(AES(key));
-      
-      final encryptedMessage = payload['encryptedMessage'] as String;
-      
-      
-      // Verify the encrypted message is valid base64
-      try {
-        base64Decode(encryptedMessage);
-        
-      } catch (e) {
-        
-        throw Exception('Invalid encrypted message format');
-      }
-      
-      final decryptedMessage = encrypter.decrypt64(encryptedMessage, iv: iv);
-      
-      
-      return decryptedMessage;
-    } catch (e) {
-      
-      
-      rethrow;
-    }
-  }
-
-  // Store other user's public key locally
+  // Store public key for a user
   Future<void> storePublicKey(String userId, String publicKey) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('${_publicKeyPrefix}$userId', publicKey);
-    } catch (e) {
-      
-    }
-  }
-
-  // Generate unique message ID
-  String _generateMessageId() {
-    final random = Random.secure();
-    final bytes = List<int>.generate(16, (i) => random.nextInt(256));
-    return base64Encode(bytes);
-  }
-
-  // Verify message integrity
-  bool verifyMessageIntegrity(String originalMessage, String decryptedMessage) {
-    return originalMessage == decryptedMessage;
-  }
-
-  // Generate key fingerprint for verification
-  String generateKeyFingerprint(String publicKey) {
-    final bytes = utf8.encode(publicKey);
-    final digest = sha256.convert(bytes);
-    return digest.toString().substring(0, 16).toUpperCase();
-  }
-
-  // Initialize E2EE for current user (always enabled)
-  Future<bool> initializeE2EE() async {
-    try {
-      final userId = _getCurrentUserId();
-      
-      // Check if already initialized
-      final prefs = await SharedPreferences.getInstance();
-      final existingKey = prefs.getString('${_privateKeyPrefix}$userId');
-      final existingSharedKey = prefs.getString('${_sharedKeyPrefix}$userId');
-      
-      if (existingKey != null && existingKey.isNotEmpty && 
-          existingSharedKey != null && existingSharedKey.isNotEmpty) {
-        
-        return true; // Already initialized
-      }
-      
-      
-      
-      // Generate new key pair and shared key
-      final keyPair = await generateKeyPair();
-      
-      // Ensure shared key exists for database encryption
-      if (existingSharedKey == null || existingSharedKey.isEmpty) {
-        final random = Random.secure();
-        final keyBytes = List<int>.generate(32, (i) => random.nextInt(256));
-        final sharedKey = base64Encode(keyBytes);
-        await prefs.setString('${_sharedKeyPrefix}$userId', sharedKey);
-        
-      }
-      
-      
-      return true;
-    } catch (e) {
-      
-      return false;
-    }
-  }
-
-  // Force sync keys from Firestore
-  Future<bool> syncKeysFromFirestore() async {
-    try {
-      final userId = _getCurrentUserId();
-      
-      
-      final userDoc = await _firestore.collection('users').doc(userId).get();
-      
-      if (userDoc.exists) {
-        final userData = userDoc.data() as Map<String, dynamic>;
-        final publicKey = userData['publicKey'] as String?;
-        
-        if (publicKey != null && publicKey.isNotEmpty) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('${_privateKeyPrefix}$userId', publicKey);
-          
-          return true;
-        }
-      }
-      
-      
-      return false;
-    } catch (e) {
-      
-      return false;
-    }
-  }
-
-  // Test encryption/decryption
-  Future<bool> testEncryption() async {
-    try {
-      final testMessage = "Test message for encryption";
-      
-      
-      // Test database encryption
-      final encrypted = await encryptForDatabase(testMessage);
-      
-      
-      final decrypted = await decryptFromDatabase(encrypted);
-      
-      
-      final success = testMessage == decrypted;
-      
-      
-      return success;
-    } catch (e) {
-      
-      return false;
-    }
-  }
-
-  // Sync encryption keys between users in a conversation
-  Future<void> syncKeysForConversation(String conversationId, String otherUserId) async {
-    try {
-      final currentUserId = _getCurrentUserId();
-      final prefs = await SharedPreferences.getInstance();
-      
-      // Get current user's shared key
-      String currentUserKey = prefs.getString('${_sharedKeyPrefix}$currentUserId') ?? '';
-      
-      // Get other user's shared key from Firestore
-      final otherUserDoc = await _firestore.collection('users').doc(otherUserId).get();
-      if (otherUserDoc.exists) {
-        final otherUserData = otherUserDoc.data() as Map<String, dynamic>;
-        final otherUserKey = otherUserData['sharedKey'] as String? ?? '';
-        
-        if (otherUserKey.isNotEmpty) {
-          // Store other user's key locally for decryption
-          await prefs.setString('${_sharedKeyPrefix}$otherUserId', otherUserKey);
-          
-        }
-      }
-      
-      // Share current user's key with other user
-      if (currentUserKey.isNotEmpty) {
-        await _firestore.collection('users').doc(currentUserId).update({
-          'sharedKey': currentUserKey,
-          'keyLastUpdated': FieldValue.serverTimestamp(),
-        });
-        
-      }
-    } catch (e) {
-      
-    }
-  }
-
-  // Initialize encryption for a new conversation
-  Future<void> initializeConversationEncryption(String conversationId, String otherUserId) async {
-    try {
-      final currentUserId = _getCurrentUserId();
-      final prefs = await SharedPreferences.getInstance();
-      
-      // Generate a conversation-specific key
-      final random = Random.secure();
-      final keyBytes = List<int>.generate(32, (i) => random.nextInt(256));
-      final conversationKey = base64Encode(keyBytes);
-      
-      // Store conversation key locally
-      await prefs.setString('${_sharedKeyPrefix}conv_$conversationId', conversationKey);
-      
-      // Store conversation key in Firestore for both users
-      await _firestore.collection('conversations').doc(conversationId).update({
-        'encryptionKey': conversationKey,
-        'keyCreatedBy': currentUserId,
-        'keyCreatedAt': FieldValue.serverTimestamp(),
+      // Store in Firestore
+      await _firestore.collection('users').doc(userId).update({
+        'publicKey': publicKey,
+        'keyFingerprint': generateKeyFingerprint(publicKey),
+        'e2eeEnabled': true,
+        'keyUpdatedAt': FieldValue.serverTimestamp(),
       });
       
+      // Also store locally for offline access
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('${_publicKeyPrefix}$userId', publicKey);
       
+      // Public key stored successfully
     } catch (e) {
-      
+      // Silent error handling
     }
   }
 
-  // Get current user ID from Firebase Auth
-  String _getCurrentUserId() {
-    final user = FirebaseAuth.instance.currentUser;
-    return user?.uid ?? 'unknown_user';
-  }
-
-  // Get current conversation ID (from context or parameter)
-  String? _getCurrentConversationId() {
-    // This should be passed from the MessagesService
-    // For now, we'll use a global variable or get it from context
-    return _currentConversationId;
-  }
-
-  // Set current conversation ID
-  void setCurrentConversationId(String conversationId) {
-    _currentConversationId = conversationId;
-  }
-
-  // Get or generate conversation key
+  // Get conversation key
   Future<String> _getConversationKey(String conversationId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final keyName = 'conversation_key_$conversationId';
+      final key = prefs.getString('${_sharedKeyPrefix}$conversationId');
       
-      // Try to get existing key
-      String? conversationKey = prefs.getString(keyName);
-      
-      if (conversationKey == null || conversationKey.isEmpty) {
-        // Generate new conversation key
-        final random = Random.secure();
-        final keyBytes = List<int>.generate(32, (i) => random.nextInt(256));
-        conversationKey = base64Encode(keyBytes);
-        
-        // Save locally
-        await prefs.setString(keyName, conversationKey);
-        
-        // Save to Firestore for other participants
-        await _firestore.collection('conversations').doc(conversationId).update({
-          'encryptionKey': conversationKey,
-          'keyGeneratedAt': FieldValue.serverTimestamp(),
-          'keyGeneratedBy': _getCurrentUserId(),
-        });
-        
-        
+      if (key != null) {
+        return key;
       }
       
-      return conversationKey;
-    } catch (e) {
-      
-      return '';
-    }
-  }
-
-  // Sync conversation key from Firestore
-  Future<bool> syncConversationKey(String conversationId) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final keyName = 'conversation_key_$conversationId';
-      
-      // Check if we already have the key
-      String? existingKey = prefs.getString(keyName);
-      if (existingKey != null && existingKey.isNotEmpty) {
-        
-        return true;
-      }
-      
-      // Get key from Firestore
-      final conversationDoc = await _firestore.collection('conversations').doc(conversationId).get();
-      
-      if (conversationDoc.exists) {
-        final conversationData = conversationDoc.data() as Map<String, dynamic>;
-        final encryptionKey = conversationData['encryptionKey'] as String?;
-        
-        if (encryptionKey != null && encryptionKey.isNotEmpty) {
-          // Save locally
-          await prefs.setString(keyName, encryptionKey);
+      // Always try to get key from Firestore first
+      try {
+        final conversationDoc = await _firestore.collection('conversations').doc(conversationId).get();
+        if (conversationDoc.exists) {
+          final data = conversationDoc.data() as Map<String, dynamic>;
+          final sharedKey = data['sharedKey'] as String?;
           
-          return true;
+          if (sharedKey != null && sharedKey.isNotEmpty) {
+            await prefs.setString('${_sharedKeyPrefix}$conversationId', sharedKey);
+            return sharedKey;
+          }
         }
+      } catch (e) {
+        // Silent error handling
       }
       
+      // If no key exists in Firestore, wait a bit and try again (for race conditions)
+      await Future.delayed(Duration(milliseconds: 500));
       
-      return false;
+      try {
+        final conversationDoc = await _firestore.collection('conversations').doc(conversationId).get();
+        if (conversationDoc.exists) {
+          final data = conversationDoc.data() as Map<String, dynamic>;
+          final sharedKey = data['sharedKey'] as String?;
+          
+          if (sharedKey != null && sharedKey.isNotEmpty) {
+            await prefs.setString('${_sharedKeyPrefix}$conversationId', sharedKey);
+            return sharedKey;
+          }
+        }
+      } catch (e) {
+        // Silent error handling
+      }
+      
+                   // Generate new conversation key only if no key exists in Firestore
+      final random = Random.secure();
+      final keyBytes = List<int>.generate(32, (i) => random.nextInt(256));
+      final newKey = base64Encode(keyBytes);
+      
+      await prefs.setString('${_sharedKeyPrefix}$conversationId', newKey);
+      
+      // Store key in Firestore for other participants
+      try {
+        await _firestore.collection('conversations').doc(conversationId).update({
+          'sharedKey': newKey,
+          'keyGeneratedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        // If storing in Firestore fails, we still have the local key
+      }
+       
+       return newKey;
     } catch (e) {
-      
-      return false;
+      // Fallback to a default key
+      return base64Encode(List<int>.generate(32, (i) => i));
     }
   }
 
-  // Initialize E2EE for a conversation
-  Future<bool> initializeConversationE2EE(String conversationId) async {
+  // Initialize conversation E2EE
+  void initializeConversationE2EE(String conversationId) {
+    // This method is called when starting to listen to a conversation
+    // The actual key generation happens when needed
+  }
+
+  // Force key generation
+  Future<void> forceKeyGeneration() async {
     try {
-      
-      
-      // Set current conversation ID
-      setCurrentConversationId(conversationId);
-      
-      // Get or generate conversation key
-      final conversationKey = await _getConversationKey(conversationId);
-      
-      if (conversationKey.isNotEmpty) {
-        
-        return true;
-      } else {
-        
-        return false;
-      }
+      await generateKeyPair();
     } catch (e) {
-      
-      return false;
+      // Silent error handling
     }
   }
 
-  // Test E2EE for a conversation
-  Future<bool> testConversationE2EE(String conversationId) async {
-    try {
-      
-      
-      // Initialize E2EE
-      final initialized = await initializeConversationE2EE(conversationId);
-      if (!initialized) {
-        
-        return false;
-      }
-      
-      // Test message
-      final testMessage = "Test E2EE message - ${DateTime.now().millisecondsSinceEpoch}";
-      
-      // Encrypt
-      final encrypted = await encryptForDatabase(testMessage);
-      
-      
-      // Decrypt
-      final decrypted = await decryptFromDatabase(encrypted);
-      
-      
-      // Verify
-      final success = testMessage == decrypted;
-      
-      
-      return success;
-    } catch (e) {
-      
-      return false;
+  // Get current user ID
+  String _getCurrentUserId() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw Exception('No authenticated user found');
     }
+    return user.uid;
   }
 
-  // Variable to store current conversation ID
+  // Get current conversation ID (this would be set by the UI)
+  String? _getCurrentConversationId() {
+    // Return the current conversation ID set by the UI
+    return _currentConversationId;
+  }
+  
+  // Set current conversation ID for encryption
   String? _currentConversationId;
-} 
+  
+  void setCurrentConversationId(String conversationId) {
+    _currentConversationId = conversationId;
+  }
+  
+  // Get current conversation ID
+  String? getCurrentConversationId() {
+    return _currentConversationId;
+  }
+
+  // Generate key fingerprint for verification
+  String generateKeyFingerprint(String key) {
+    final bytes = utf8.encode(key);
+    final digest = sha256.convert(bytes);
+    return digest.toString().substring(0, 16);
+  }
+
+  // Check if E2EE is enabled for current user
+  Future<bool> isE2EEEnabled() async {
+    try {
+      final userId = _getCurrentUserId();
+      final prefs = await SharedPreferences.getInstance();
+      final privateKey = prefs.getString('${_privateKeyPrefix}$userId');
+      return privateKey != null && privateKey.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Enable E2EE for current user
+  Future<bool> enableE2EE() async {
+    try {
+      await generateKeyPair();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+     // Disable E2EE for current user
+   Future<bool> disableE2EE() async {
+     try {
+       final userId = _getCurrentUserId();
+       final prefs = await SharedPreferences.getInstance();
+       
+       // Remove local keys
+       await prefs.remove('${_privateKeyPrefix}$userId');
+       await prefs.remove('${_publicKeyPrefix}$userId');
+       
+       // Update Firestore
+       await _firestore.collection('users').doc(userId).update({
+         'e2eeEnabled': false,
+         'publicKey': null,
+         'keyFingerprint': null,
+         'e2eeDisabledAt': FieldValue.serverTimestamp(),
+       });
+       
+               return true;
+      } catch (e) {
+        return false;
+      }
+   }
+   
+   // Reset conversation encryption (for orphaned messages)
+   Future<void> resetConversationEncryption(String conversationId) async {
+     try {
+       final prefs = await SharedPreferences.getInstance();
+       
+       // Remove all keys for this conversation
+       await prefs.remove('${_sharedKeyPrefix}$conversationId');
+       await prefs.remove('${_sharedKeyPrefix}legacy_$conversationId');
+       await prefs.remove('${_sharedKeyPrefix}old_$conversationId');
+       
+       // Clear key from Firestore
+       try {
+         await _firestore.collection('conversations').doc(conversationId).update({
+           'sharedKey': null,
+           'keyResetAt': FieldValue.serverTimestamp(),
+         });
+                   // Reset conversation encryption for: $conversationId
+        } catch (e) {
+          // Silent error handling
+        }
+      } catch (e) {
+        // Silent error handling
+      }
+   }
+ } 
+

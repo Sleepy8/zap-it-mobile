@@ -78,67 +78,67 @@ class BottomNavigation extends StatelessWidget {
     int badgeCount = 0,
   }) {
     final isActive = currentIndex == index;
-    final showBadge = badgeCount > 0 && index == 2;
+    final showBadge = badgeCount > 0 && index == 3; // ZAP tab (index 3)
     
     return GestureDetector(
       onTap: () => onTap(index),
-              child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Icon(
-                    isActive ? activeIcon : icon,
-                    color: isActive ? AppTheme.limeAccent : AppTheme.textSecondary,
-                    size: 28,
-                  ),
-                  if (showBadge)
-                    Positioned(
-                      top: -2,
-                      right: -2,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.limeAccent,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: AppTheme.primaryDark,
-                            width: 1,
-                          ),
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 16,
-                          minHeight: 16,
-                        ),
-                        child: Text(
-                          badgeCount > 99 ? '99+' : badgeCount.toString(),
-                          style: const TextStyle(
-                            color: AppTheme.primaryDark,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  isActive ? activeIcon : icon,
+                  color: isActive ? AppTheme.limeAccent : AppTheme.textSecondary,
+                  size: 28,
+                ),
+                if (showBadge)
+                  Positioned(
+                    top: -2,
+                    right: -2,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.limeAccent,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppTheme.primaryDark,
+                          width: 1,
                         ),
                       ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        badgeCount > 99 ? '99+' : badgeCount.toString(),
+                        style: const TextStyle(
+                          color: AppTheme.primaryDark,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
-                ],
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? AppTheme.limeAccent : AppTheme.textSecondary,
+                fontSize: 9,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
               ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isActive ? AppTheme.limeAccent : AppTheme.textSecondary,
-                  fontSize: 9,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
+      ),
     );
   }
 } 

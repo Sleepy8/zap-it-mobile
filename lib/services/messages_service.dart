@@ -41,15 +41,20 @@ class MessagesService {
           final isBlocked = data['isBlocked']?[currentUserId] ?? false;
           final isDeleted = data['isDeleted']?[currentUserId] ?? false;
           
-          // Decrypt last message if it's encrypted
+          // Get last message - simplified to handle both encrypted and plain text
           String lastMessage = data['lastMessage'] ?? '';
-          if (data['isLastMessageEncrypted'] == true) {
+          if (lastMessage.isNotEmpty) {
             try {
-              lastMessage = await _encryptionService.decryptFromDatabase(lastMessage);
-              
+              // Try to decrypt if it's encrypted, otherwise use as-is
+              if (data['isLastMessageEncrypted'] == true) {
+                lastMessage = await _encryptionService.decryptFromDatabase(lastMessage);
+              }
+              // If decryption fails or returns error message, show original
+              if (lastMessage.contains('[Messaggio') || lastMessage.contains('non leggibile')) {
+                lastMessage = data['lastMessage'] ?? '';
+              }
             } catch (e) {
-              
-              lastMessage = '[Messaggio crittografato]';
+              lastMessage = data['lastMessage'] ?? '';
             }
           }
           
@@ -75,48 +80,56 @@ class MessagesService {
 
   // Get messages for a specific conversation
   Stream<List<Map<String, dynamic>>> getMessagesStream(String conversationId) {
-    
-    
     // Initialize E2EE for this conversation
     _encryptionService.initializeConversationE2EE(conversationId);
+    // Set current conversation ID for encryption
+    _encryptionService.setCurrentConversationId(conversationId);
     
+    // Check if conversation exists first
     return _firestore
         .collection('conversations')
         .doc(conversationId)
-        .collection('messages')
-        .orderBy('createdAt', descending: true)
-        .limit(50)
         .snapshots()
-        .asyncMap((snapshot) async {
+        .asyncMap((conversationDoc) async {
+      if (!conversationDoc.exists) {
+        // Return empty list if conversation doesn't exist
+        return <Map<String, dynamic>>[];
+      }
+      
+      final messagesSnapshot = await _firestore
+          .collection('conversations')
+          .doc(conversationId)
+          .collection('messages')
+          .orderBy('createdAt', descending: false)
+          .limit(50)
+          .get();
       
       List<Map<String, dynamic>> messages = [];
       
-      for (var doc in snapshot.docs) {
+      for (var doc in messagesSnapshot.docs) {
         final data = doc.data();
         
-        
-        String decryptedText = data['text'];
-        
-        // Decrypt message if it's encrypted
-        if (data['isEncrypted'] == true) {
+        // Get message text - simplified to handle both encrypted and plain text
+        String messageText = data['text'] ?? '';
+        if (messageText.isNotEmpty) {
           try {
-            // Decrypt message from database
-            decryptedText = await _encryptionService.decryptFromDatabase(data['text']);
-            
+            // Try to decrypt if it's encrypted, otherwise use as-is
+            if (data['isEncrypted'] == true) {
+              messageText = await _encryptionService.decryptFromDatabase(messageText);
+            }
+            // If decryption fails or returns error message, show original
+            if (messageText.contains('[Messaggio') || messageText.contains('non leggibile')) {
+              messageText = data['text'] ?? '';
+            }
           } catch (e) {
-            
-            decryptedText = '[Messaggio crittografato - errore di decrittografia: ${e.toString()}]';
+            messageText = data['text'] ?? '';
           }
-        } else {
-          // Handle unencrypted messages (legacy)
-          decryptedText = data['text'] ?? '';
-          
         }
         
         messages.add({
           'id': doc.id,
           'senderId': data['senderId'],
-          'text': decryptedText,
+          'text': messageText,
           'createdAt': data['createdAt'],
           'isRead': data['isRead'] ?? false,
           'isCurrentUser': data['senderId'] == currentUserId,
@@ -124,644 +137,430 @@ class MessagesService {
         });
       }
       
-      
       return messages;
     });
   }
 
   // Send a message
-  Future<bool> sendMessage(String conversationId, String text) async {
+  Future<Map<String, dynamic>> sendMessage(String conversationId, String text) async {
     try {
       final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-      if (currentUserId == null) {
-        
-        return false;
-      }
-
       
-
-      // Get the other user ID from conversation
-      final conversationDoc = await _firestore
-          .collection('conversations')
-          .doc(conversationId)
-          .get();
+      if (currentUserId == null) {
+        return {'success': false, 'conversationId': null};
+      }
 
       String? realConversationId = conversationId;
       String? otherUserId;
       Map<String, dynamic>? conversationData;
 
+      // Check if this is a new conversation (conversationId is actually the otherUserId)
+      // First try to find if this conversation exists
+      final conversationDoc = await _firestore
+          .collection('conversations')
+          .doc(conversationId)
+          .get();
+
       if (!conversationDoc.exists) {
-        
-        // Create new conversation when first message is sent
-        realConversationId = await _createNewConversation(conversationId); // conversationId is the otherUserId
+        // This is a new conversation - conversationId is actually the otherUserId
+        realConversationId = await _createNewConversation(conversationId);
         if (realConversationId == null) {
-          
-          return false;
+          return {'success': false, 'conversationId': null};
         }
-        // Get the newly created conversation
-        final newDoc = await _firestore.collection('conversations').doc(realConversationId).get();
-        if (!newDoc.exists) {
-          
-          return false;
-        }
-        conversationData = newDoc.data() as Map<String, dynamic>;
-        final participants = List<String>.from(conversationData['participants']);
-        otherUserId = participants.firstWhere((id) => id != currentUserId);
+        otherUserId = conversationId; // The original conversationId was the other user ID
       } else {
+        // This is an existing conversation
         conversationData = conversationDoc.data() as Map<String, dynamic>;
         final participants = List<String>.from(conversationData['participants']);
         otherUserId = participants.firstWhere((id) => id != currentUserId);
+        realConversationId = conversationId;
       }
 
-      
-      
+      // Get conversation data if not already available
+      if (conversationData == null) {
+        final conversationDoc = await _firestore.collection('conversations').doc(realConversationId).get();
+        if (conversationDoc.exists) {
+          conversationData = conversationDoc.data() as Map<String, dynamic>;
+        }
+      }
 
-      // Sync encryption keys before sending message
-      
-      await _encryptionService.syncKeysForConversation(realConversationId!, otherUserId);
+      // Set current conversation ID for encryption
+      _encryptionService.setCurrentConversationId(realConversationId);
 
-      // Always encrypt message for database storage
-      
-      final encryptedMessage = await _encryptionService.encryptForDatabase(text.trim());
-      
+      // Encrypt message for database
+      final encryptedText = await _encryptionService.encryptForDatabase(text.trim());
       
       final messageData = {
         'senderId': currentUserId,
-        'text': encryptedMessage, // Store encrypted message
-        'isEncrypted': true, // Mark as encrypted
+        'text': encryptedText,
+        'isEncrypted': true, // Enable encryption
         'createdAt': FieldValue.serverTimestamp(),
         'isRead': false,
       };
 
-      
       // Add message to conversation
-      final messageDoc = await _firestore
+      await _firestore
           .collection('conversations')
           .doc(realConversationId)
           .collection('messages')
           .add(messageData);
 
-      
+      // Update conversation with last message info
+      final unreadCount = Map<String, int>.from(conversationData?['unreadCount'] ?? {});
+      unreadCount[otherUserId] = (unreadCount[otherUserId] ?? 0) + 1;
 
-      // Update conversation metadata with encrypted message
+      // Encrypt last message for conversation preview
+      final encryptedLastMessage = await _encryptionService.encryptForDatabase(text.trim());
       
-      await _firestore
-          .collection('conversations')
-          .doc(realConversationId)
-          .update({
-        'lastMessage': encryptedMessage, // Store encrypted message
-        'isLastMessageEncrypted': true, // Mark as encrypted
+      await _firestore.collection('conversations').doc(realConversationId).update({
+        'lastMessage': encryptedLastMessage,
         'lastMessageAt': FieldValue.serverTimestamp(),
-        'unreadCount.$otherUserId': FieldValue.increment(1),
+        'isLastMessageEncrypted': true, // Enable encryption
+        'unreadCount': unreadCount,
       });
 
-      
-
-      // Send push notification to the other user via messages collection
-      
-      await _sendMessageNotification(otherUserId, text, realConversationId);
-
-      
-      return true;
+      return {'success': true, 'conversationId': realConversationId};
     } catch (e) {
-      
-      
-      return false;
+      return {'success': false, 'conversationId': null};
     }
   }
 
-  // Send push notification for new message
-  Future<void> _sendMessageNotification(String receiverId, String messageText, String conversationId) async {
+  // Create new conversation
+  Future<String?> _createNewConversation(String otherUserId) async {
     try {
-      // Get current user info
-      final currentUserDoc = await _firestore
-          .collection('users')
-          .doc(currentUserId)
-          .get();
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return null;
 
-      if (currentUserDoc.exists) {
-        final currentUserData = currentUserDoc.data() as Map<String, dynamic>;
-        final currentUserName = currentUserData['name'] ?? currentUserData['username'] ?? 'Un amico';
-
-        // La Cloud Function si attiva automaticamente quando viene creato un messaggio
-        // nella subcollection messages della conversazione
-        // Non serve inviare nulla di aggiuntivo, la Cloud Function intercetta il nuovo messaggio
-        
+      // Get other user data
+      final otherUserDoc = await _firestore.collection('users').doc(otherUserId).get();
+      if (!otherUserDoc.exists) {
+        return null;
       }
-    } catch (e) {
-      
-    }
-  }
 
-  // Get existing conversation between two users (don't create if not exists)
-  Future<String?> getExistingConversation(String otherUserId) async {
-    if (currentUserId == null) {
-      
+      final otherUserData = otherUserDoc.data() as Map<String, dynamic>;
+      final otherUsername = otherUserData['username'] ?? 'Unknown';
+
+      // Create conversation document
+      final conversationData = {
+        'participants': [currentUserId, otherUserId],
+        'createdAt': FieldValue.serverTimestamp(),
+        'lastMessageAt': FieldValue.serverTimestamp(),
+        'isArchived': {currentUserId: false, otherUserId: false},
+        'isBlocked': {currentUserId: false, otherUserId: false},
+        'isDeleted': {currentUserId: false, otherUserId: false},
+        'unreadCount': {currentUserId: 0, otherUserId: 0},
+        // Note: sharedKey will be generated when first message is sent
+      };
+
+      final conversationRef = await _firestore.collection('conversations').add(conversationData);
+      return conversationRef.id;
+    } catch (e) {
       return null;
     }
+  }
 
+  // Get or create conversation between two users
+  Future<String?> getOrCreateConversation(String otherUserId) async {
     try {
-      
-      
-      // Check if conversation already exists
-      final existingConversation = await _firestore
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return null;
+
+      // First try to get existing conversation
+      final query = await _firestore
           .collection('conversations')
           .where('participants', arrayContains: currentUserId)
           .get();
 
-      
-
-      for (var doc in existingConversation.docs) {
-        final participants = List<String>.from(doc.data()['participants']);
-        
-        
+      for (var doc in query.docs) {
+        final data = doc.data();
+        final participants = List<String>.from(data['participants']);
         if (participants.contains(otherUserId)) {
-          
-          
-          // Sync encryption keys for existing conversation
-          await _encryptionService.syncKeysForConversation(doc.id, otherUserId);
-          
           return doc.id;
         }
       }
 
-      
-      return null;
+      // If no conversation exists, create one
+      return await _createNewConversation(otherUserId);
     } catch (e) {
-      
-      
       return null;
     }
   }
 
-  // Create new conversation when first message is sent
-  Future<String?> _createNewConversation(String otherUserId) async {
-    if (currentUserId == null) {
-      
-      return null;
-    }
-
+  // Initialize E2EE for current user
+  Future<bool> initializeE2EE() async {
     try {
-      
-      
-      // Verify both users exist
-      final currentUserDoc = await _firestore.collection('users').doc(currentUserId).get();
-      final otherUserDoc = await _firestore.collection('users').doc(otherUserId).get();
-      
-      if (!currentUserDoc.exists) {
-        
-        return null;
-      }
-      
-      if (!otherUserDoc.exists) {
-        
-        return null;
-      }
-      
-      
-      
-      final conversationDoc = await _firestore.collection('conversations').add({
-        'participants': [currentUserId, otherUserId],
-        'createdAt': FieldValue.serverTimestamp(),
-        'lastMessage': '',
-        'lastMessageAt': FieldValue.serverTimestamp(),
-        'unreadCount': {currentUserId: 0, otherUserId: 0},
-        'isArchived': {currentUserId: false, otherUserId: false},
-        'isBlocked': {currentUserId: false, otherUserId: false},
-        'isDeleted': {currentUserId: false, otherUserId: false},
-        'createdBy': currentUserId, // Track who created the conversation
-      });
-
-      
-
-      // Initialize encryption for new conversation
-      await _encryptionService.initializeConversationEncryption(conversationDoc.id, otherUserId);
-
-      return conversationDoc.id;
-    } catch (e) {
-      
-      
-      return null;
-    }
-  }
-
-  // Create or get conversation between two users
-  Future<String?> getOrCreateConversation(String otherUserId) async {
-    // First try to get existing conversation
-    final existingConversationId = await getExistingConversation(otherUserId);
-    if (existingConversationId != null) {
-      return existingConversationId;
-    }
-
-    // If no conversation exists, create a temporary one for the sender only
-    // The conversation will be properly created when the first message is sent
-    
-    return null;
-  }
-
-  // Notify other user about new conversation
-  Future<void> _notifyNewConversation(String otherUserId, String conversationId) async {
-    try {
-      // Get current user info
-      final currentUserDoc = await _firestore
-          .collection('users')
-          .doc(currentUserId)
-          .get();
-      
-      if (currentUserDoc.exists) {
-        final currentUserData = currentUserDoc.data() as Map<String, dynamic>;
-        final currentUserName = currentUserData['name'] ?? currentUserData['username'] ?? 'Un amico';
-
-        // Create a notification for the other user
-        await _firestore.collection('notifications').add({
-          'receiverId': otherUserId,
-          'senderId': currentUserId,
-          'type': 'new_conversation',
-          'title': 'Nuova Chat',
-          'body': '$currentUserName ha iniziato una conversazione con te',
-          'data': {
-            'conversationId': conversationId,
-            'senderName': currentUserName,
-          },
-          'created_at': FieldValue.serverTimestamp(),
-          'read': false,
-        });
-
-        
-      }
-    } catch (e) {
-      
-    }
-  }
-
-  // Mark messages as read
-  Future<void> markMessagesAsRead(String conversationId) async {
-    if (currentUserId == null) return;
-
-    try {
-      // Mark all unread messages as read
-      final unreadMessages = await _firestore
-          .collection('conversations')
-          .doc(conversationId)
-          .collection('messages')
-          .where('senderId', isNotEqualTo: currentUserId)
-          .where('isRead', isEqualTo: false)
-          .get();
-
-      final batch = _firestore.batch();
-      for (var doc in unreadMessages.docs) {
-        batch.update(doc.reference, {'isRead': true});
-      }
-
-      // Reset unread count
-      batch.update(
-        _firestore.collection('conversations').doc(conversationId),
-        {'unreadCount.$currentUserId': 0},
-      );
-
-      await batch.commit();
-    } catch (e) {
-      
-    }
-  }
-
-  // Archive conversation for current user only
-  Future<bool> archiveConversation(String conversationId) async {
-    if (currentUserId == null) return false;
-
-    try {
-      await _firestore
-          .collection('conversations')
-          .doc(conversationId)
-          .update({
-        'isArchived.$currentUserId': true,
-      });
+      await _encryptionService.generateKeyPair();
       return true;
     } catch (e) {
-      
       return false;
     }
   }
 
-  // Unarchive conversation
-  Future<void> unarchiveConversation(String conversationId) async {
-    if (currentUserId == null) return;
-
+  // Force E2EE initialization
+  Future<bool> forceE2EEInitialization() async {
     try {
-      await _firestore
-          .collection('conversations')
-          .doc(conversationId)
-          .update({
-        'isArchived.$currentUserId': false,
-      });
+      await _encryptionService.forceKeyGeneration();
+      return true;
     } catch (e) {
-      
+      return false;
     }
   }
 
   // Block user
   Future<void> blockUser(String conversationId, String otherUserId) async {
-    if (currentUserId == null) return;
-
     try {
-      await _firestore
-          .collection('conversations')
-          .doc(conversationId)
-          .update({
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
         'isBlocked.$currentUserId': true,
       });
+
+      // User blocked: $otherUserId
     } catch (e) {
-      
+      // Silent error handling
     }
   }
 
   // Unblock user
   Future<void> unblockUser(String conversationId, String otherUserId) async {
-    if (currentUserId == null) return;
-
     try {
-      await _firestore
-          .collection('conversations')
-          .doc(conversationId)
-          .update({
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
         'isBlocked.$currentUserId': false,
       });
+
+      // User unblocked: $otherUserId
     } catch (e) {
-      
+      // Silent error handling
     }
   }
 
-  // Delete conversation locally for current user
+  // Delete conversation locally
   Future<bool> deleteConversationLocally(String conversationId) async {
-    if (currentUserId == null) return false;
-
     try {
-      // Mark conversation as deleted for current user
-      await _firestore
-          .collection('conversations')
-          .doc(conversationId)
-          .update({
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return false;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
         'isDeleted.$currentUserId': true,
       });
 
-      // Check if both users have deleted the conversation
+      // Conversation deleted locally: $conversationId
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Mark messages as read
+  Future<void> markMessagesAsRead(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      // Get conversation data
       final conversationDoc = await _firestore
           .collection('conversations')
           .doc(conversationId)
           .get();
 
-      if (!conversationDoc.exists) return false;
+      if (!conversationDoc.exists) return;
 
-      final data = conversationDoc.data() as Map<String, dynamic>;
-      final isDeleted = data['isDeleted'] as Map<String, dynamic>? ?? {};
+      final conversationData = conversationDoc.data() as Map<String, dynamic>;
+      final unreadCount = Map<String, int>.from(conversationData['unreadCount'] ?? {});
       
-      // Check if both users have deleted the conversation
-      final participants = List<String>.from(data['participants']);
-      bool bothDeleted = true;
-      
-      for (String participantId in participants) {
-        if (!(isDeleted[participantId] ?? false)) {
-          bothDeleted = false;
-          break;
-        }
-      }
+      // Reset unread count for current user
+      unreadCount[currentUserId] = 0;
 
-      if (bothDeleted) {
-        // Both users deleted, clean up the database
-        
-        
-        // Delete all messages in the conversation subcollection
-        final messagesSnapshot = await _firestore
-            .collection('conversations')
-            .doc(conversationId)
-            .collection('messages')
-            .get();
-
-        for (var doc in messagesSnapshot.docs) {
-          await doc.reference.delete();
-        }
-
-        // Delete all messages from the messages collection for this conversation
-        final messagesCollectionSnapshot = await _firestore
-            .collection('messages')
-            .where('chatId', isEqualTo: conversationId)
-            .get();
-
-        for (var doc in messagesCollectionSnapshot.docs) {
-          await doc.reference.delete();
-        }
-
-        // Delete the conversation document
-        await conversationDoc.reference.delete();
-        
-        return true;
-      } else {
-        
-        return true;
-      }
-    } catch (e) {
-      
-      return false;
-    }
-  }
-
-  // Delete conversation completely (only if both users archived it) - DEPRECATED
-  Future<bool> deleteConversation(String conversationId) async {
-    return await deleteConversationLocally(conversationId);
-  }
-
-  // Get unread messages count
-  Stream<int> getUnreadCountStream() {
-    if (currentUserId == null) return Stream.value(0);
-
-    return _firestore
-        .collection('conversations')
-        .where('participants', arrayContains: currentUserId)
-        .snapshots()
-        .map((snapshot) {
-      int totalUnread = 0;
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final unreadCount = (data['unreadCount']?[currentUserId] ?? 0) as int;
-        final isArchived = data['isArchived']?[currentUserId] ?? false;
-        if (!isArchived) {
-          totalUnread += unreadCount;
-        }
-      }
-      return totalUnread;
-    });
-  }
-
-  // Initialize E2EE for user
-  Future<bool> initializeE2EE() async {
-    if (currentUserId == null) return false;
-
-    try {
-      // Generate key pair for current user
-      final keyPair = await _encryptionService.generateKeyPair();
-      
-      // Store public key in Firestore for other users to access
-      await _firestore
-          .collection('users')
-          .doc(currentUserId)
-          .update({
-        'publicKey': keyPair['publicKey'],
-        'keyFingerprint': _encryptionService.generateKeyFingerprint(keyPair['publicKey']!),
-        'e2eeEnabled': true,
-        'keyGeneratedAt': FieldValue.serverTimestamp(),
+      // Update conversation
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'unreadCount': unreadCount,
       });
 
-      return true;
+      // Messages marked as read for conversation: $conversationId
     } catch (e) {
-      
-      return false;
+      // Silent error handling
     }
   }
 
-  // Get public key for a user
-  Future<String?> getUserPublicKey(String userId) async {
+  // Archive conversation
+  Future<void> archiveConversation(String conversationId) async {
     try {
-      // First try to get from local storage
-      String? publicKey = await _encryptionService.getPublicKey(userId);
-      
-      if (publicKey == null) {
-        // If not found locally, get from Firestore
-        final userDoc = await _firestore
-            .collection('users')
-            .doc(userId)
-            .get();
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'isArchived.$currentUserId': true,
+      });
+
+      // Conversation archived: $conversationId
+    } catch (e) {
+      // Silent error handling
+    }
+  }
+
+  // Unarchive conversation
+  Future<void> unarchiveConversation(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'isArchived.$currentUserId': false,
+      });
+
+      // Conversation unarchived: $conversationId
+    } catch (e) {
+      // Silent error handling
+    }
+  }
+
+  // Block conversation
+  Future<void> blockConversation(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'isBlocked.$currentUserId': true,
+      });
+
+      // Conversation blocked: $conversationId
+    } catch (e) {
+      // Silent error handling
+    }
+  }
+
+  // Unblock conversation
+  Future<void> unblockConversation(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'isBlocked.$currentUserId': false,
+      });
+
+      // Conversation unblocked: $conversationId
+    } catch (e) {
+      // Silent error handling
+    }
+  }
+
+  // Delete conversation locally
+  Future<void> deleteConversation(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      // Mark conversation as deleted for current user
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'isDeleted.$currentUserId': true,
+      });
+
+      // Conversation deleted locally: $conversationId
+
+      // Check if both users have deleted the conversation
+      final conversationDoc = await _firestore.collection('conversations').doc(conversationId).get();
+      if (conversationDoc.exists) {
+        final data = conversationDoc.data() as Map<String, dynamic>;
+        final participants = List<String>.from(data['participants']);
+        final isDeleted = data['isDeleted'] as Map<String, dynamic>? ?? {};
         
-        if (userDoc.exists) {
-          final userData = userDoc.data() as Map<String, dynamic>;
-          publicKey = userData['publicKey'];
-          
-          if (publicKey != null) {
-            // Store locally for future use
-            await _encryptionService.storePublicKey(userId, publicKey);
+        // Check if all participants have deleted the conversation
+        bool allDeleted = true;
+        for (String participantId in participants) {
+          if (isDeleted[participantId] != true) {
+            allDeleted = false;
+            break;
           }
         }
+        
+        // If all participants have deleted, remove the conversation from database
+        if (allDeleted) {
+          // All participants have deleted conversation, removing from database: $conversationId
+          
+          // Delete all messages in the conversation
+          final messagesQuery = await _firestore
+              .collection('conversations')
+              .doc(conversationId)
+              .collection('messages')
+              .get();
+          
+          // Delete messages in batches
+          final batch = _firestore.batch();
+          for (var doc in messagesQuery.docs) {
+            batch.delete(doc.reference);
+          }
+          await batch.commit();
+          
+          // Delete the conversation document
+          await _firestore.collection('conversations').doc(conversationId).delete();
+          
+          // Conversation and all messages permanently deleted: $conversationId
+        } else {
+          // Conversation marked as deleted for current user, waiting for other participant: $conversationId
+        }
       }
-      
-      return publicKey;
     } catch (e) {
-      
+      // Silent error handling
+    }
+  }
+
+  // Get conversation by ID
+  Future<Map<String, dynamic>?> getConversation(String conversationId) async {
+    try {
+      final doc = await _firestore.collection('conversations').doc(conversationId).get();
+      if (doc.exists) {
+        return {'conversationId': doc.id, ...doc.data()!};
+      }
+      return null;
+    } catch (e) {
       return null;
     }
   }
 
-  // Verify E2EE status for a conversation
-  Future<bool> verifyE2EEStatus(String conversationId) async {
+  // Get conversation between two users
+  Future<String?> getConversationId(String otherUserId) async {
     try {
-      final conversationDoc = await _firestore
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return null;
+
+      final query = await _firestore
           .collection('conversations')
-          .doc(conversationId)
+          .where('participants', arrayContains: currentUserId)
           .get();
-      
-      if (!conversationDoc.exists) return false;
-      
-      final conversationData = conversationDoc.data() as Map<String, dynamic>;
-      final participants = List<String>.from(conversationData['participants']);
-      
-      // Check if all participants have E2EE enabled
-      for (String participantId in participants) {
-        final userDoc = await _firestore
-            .collection('users')
-            .doc(participantId)
-            .get();
-        
-        if (userDoc.exists) {
-          final userData = userDoc.data() as Map<String, dynamic>;
-          if (userData['e2eeEnabled'] != true) {
-            return false;
-          }
-        } else {
-          return false;
+
+      for (var doc in query.docs) {
+        final data = doc.data();
+        final participants = List<String>.from(data['participants']);
+        if (participants.contains(otherUserId)) {
+          return doc.id;
         }
       }
-      
-      return true;
+
+      return null;
     } catch (e) {
-      
-      return false;
+      return null;
     }
   }
 
-  // Force E2EE initialization for current user
-  Future<bool> forceE2EEInitialization() async {
+  // Restore deleted conversation
+  Future<void> restoreConversation(String conversationId) async {
     try {
-      return await _encryptionService.initializeE2EE();
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'isDeleted.$currentUserId': false,
+      });
+
+      // Conversation restored: $conversationId
     } catch (e) {
-      
-      return false;
+      // Silent error handling
     }
-  }
-
-  // Check if current user has E2EE enabled (always true now)
-  Future<bool> isCurrentUserE2EEEnabled() async {
-    try {
-      if (currentUserId == null) return false;
-      // E2EE is always enabled now
-      return true;
-    } catch (e) {
-      
-      return false;
-    }
-  }
-
-  // Show in-app notification for new message
-  void showMessageNotification(BuildContext context, String senderName, String messageText) {
-    // RIMOSSO: showZapNotification, usa solo la toast custom se serve
-  }
-
-  // Listen for new messages and show notifications
-  void startMessageNotifications(BuildContext context) {
-    if (currentUserId == null) return;
-
-    
-
-    _firestore
-        .collection('conversations')
-        .where('participants', arrayContains: currentUserId)
-        .snapshots()
-        .listen((conversationsSnapshot) {
-      for (var conversationDoc in conversationsSnapshot.docs) {
-        final conversationData = conversationDoc.data();
-        final lastMessageAt = conversationData['lastMessageAt'] as Timestamp?;
-        
-        if (lastMessageAt != null) {
-          // Listen for new messages in this conversation
-          _firestore
-              .collection('conversations')
-              .doc(conversationDoc.id)
-              .collection('messages')
-              .where('senderId', isNotEqualTo: currentUserId)
-              .where('isRead', isEqualTo: false)
-              .orderBy('createdAt', descending: true)
-              .limit(1)
-              .snapshots()
-              .listen((messagesSnapshot) {
-            if (messagesSnapshot.docs.isNotEmpty) {
-              final messageData = messagesSnapshot.docs.first.data();
-              final senderId = messageData['senderId'] as String;
-              
-              // Get sender info
-              _firestore
-                  .collection('users')
-                  .doc(senderId)
-                  .get()
-                  .then((userDoc) {
-                if (userDoc.exists) {
-                  final userData = userDoc.data() as Map<String, dynamic>;
-                  final senderName = userData['name'] ?? userData['username'] ?? 'Un amico';
-                  
-                  // Show notification
-                  showMessageNotification(context, senderName, 'Nuovo messaggio');
-                }
-              });
-            }
-          });
-        }
-      }
-    });
   }
 }

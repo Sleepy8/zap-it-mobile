@@ -11,11 +11,19 @@ class AppTheme {
   static const Color errorColor = Color(0xFFCF6679);
   static const Color warningColor = Color(0xFFFF9800);
   
-  // Colori aggiuntivi per Vibe Composer
+  // Colori aggiuntivi per Vibe Composer - SOSTITUITI I COLORI ARCOBALENO
   static const Color background = primaryDark;
   static const Color primary = limeAccent;
-  static const Color secondary = Color(0xFF4CAF50);
-  static const Color accent = Color(0xFF2196F3);
+  static const Color secondary = Color(0xFF2E7D32); // Verde scuro invece di verde brillante
+  static const Color accent = Color(0xFF1976D2); // Blu scuro invece di blu brillante
+  
+  // Nuovi colori per i bottoni - più sobri
+  static const Color buttonPrimary = Color(0xFF424242); // Grigio scuro
+  static const Color buttonSecondary = Color(0xFF616161); // Grigio medio
+  static const Color buttonAccent = Color(0xFF757575); // Grigio chiaro
+  static const Color buttonSuccess = Color(0xFF2E7D32); // Verde scuro
+  static const Color buttonWarning = Color(0xFFF57C00); // Arancione scuro
+  static const Color buttonDanger = Color(0xFFD32F2F); // Rosso scuro
 
   static ThemeData get darkTheme {
     return ThemeData(

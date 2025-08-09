@@ -1,17 +1,11 @@
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { initializeApp, cert } from "firebase-admin/app";
+import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
-import fs from "fs";
-
-const serviceAccount = JSON.parse(fs.readFileSync(new URL("./service-account-key.json", import.meta.url)));
-
-initializeApp({
-  credential: cert(serviceAccount),
-  databaseURL: "https://zap-it-ac442.firebaseio.com"
-});
+// Use default credentials provided by Cloud Functions runtime (recommended)
+initializeApp();
 const db = getFirestore();
 const messaging = getMessaging();
 
@@ -177,12 +171,8 @@ export const sendZapNotification = onDocumentCreated(
             title: "", // Titolo vuoto
             body: "", // Corpo vuoto
             icon: "@mipmap/ic_launcher",
-            color: "#00000000", // Trasparente
+            color: "#000000", // Nero (invisibile)
             visibility: "private", // Privata
-            publicVersion: {
-              title: "",
-              body: "",
-            },
           },
         },
         apns: {

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../theme.dart';
 import '../services/messages_service.dart';
 import 'messages_screen.dart';
+import 'privacy_settings_screen.dart';
+import 'notification_settings_screen.dart';
+import 'edit_profile_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String userId;
@@ -387,6 +391,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   void _showProfileOptions() {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    final isOwnProfile = currentUserId == widget.userId;
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surfaceDark,
@@ -407,6 +414,55 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
             ),
             const SizedBox(height: 20),
+            
+            // Opzioni per il proprio profilo
+            if (isOwnProfile) ...[
+              ListTile(
+                leading: const Icon(
+                  Icons.edit,
+                  color: AppTheme.limeAccent,
+                ),
+                title: Text(
+                  'Modifica Profilo',
+                  style: TextStyle(color: AppTheme.textPrimary),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/edit-profile');
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.privacy_tip,
+                  color: AppTheme.limeAccent,
+                ),
+                title: Text(
+                  'Privacy',
+                  style: TextStyle(color: AppTheme.textPrimary),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/privacy-settings');
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.notifications,
+                  color: AppTheme.limeAccent,
+                ),
+                title: Text(
+                  'Notifiche',
+                  style: TextStyle(color: AppTheme.textPrimary),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/notification-settings');
+                },
+              ),
+              const Divider(color: AppTheme.textSecondary),
+            ],
+            
+            // Opzioni per tutti i profili
             ListTile(
               leading: const Icon(
                 Icons.chat_bubble_outline,
@@ -435,34 +491,36 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 _sendZap();
               },
             ),
-            ListTile(
-              leading: const Icon(
-                Icons.block,
-                color: AppTheme.errorColor,
+            if (!isOwnProfile) ...[
+              ListTile(
+                leading: const Icon(
+                  Icons.block,
+                  color: AppTheme.errorColor,
+                ),
+                title: Text(
+                  'Blocca Utente',
+                  style: TextStyle(color: AppTheme.errorColor),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showBlockConfirmation();
+                },
               ),
-              title: Text(
-                'Blocca Utente',
-                style: TextStyle(color: AppTheme.errorColor),
+              ListTile(
+                leading: const Icon(
+                  Icons.report,
+                  color: AppTheme.errorColor,
+                ),
+                title: Text(
+                  'Segnala Utente',
+                  style: TextStyle(color: AppTheme.textPrimary),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showReportDialog();
+                },
               ),
-              onTap: () {
-                Navigator.pop(context);
-                _showBlockConfirmation();
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.report,
-                color: AppTheme.errorColor,
-              ),
-              title: Text(
-                'Segnala Utente',
-                style: TextStyle(color: AppTheme.textPrimary),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _showReportDialog();
-              },
-            ),
+            ],
           ],
         ),
       ),

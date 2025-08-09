@@ -261,13 +261,14 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   void _startConversation(Map<String, dynamic> friend) async {
-    final conversationId = await _messagesService.getOrCreateConversation(friend['id']);
+    // Don't create conversation immediately, just pass the friend ID
+    // The conversation will be created when the first message is sent
     if (mounted) {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => ChatScreen(
-            conversationId: conversationId, // Can be null for new conversations
+            conversationId: null, // null means new conversation
             otherUser: friend,
             onConversationDeleted: () {
               // Force refresh when conversation is deleted
@@ -516,8 +517,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
               onTap: () async {
                 Navigator.pop(context);
                 try {
-                  final success = await _messagesService.archiveConversation(conversation['conversationId']);
-                  if (mounted && success) {
+                  await _messagesService.archiveConversation(conversation['conversationId']);
+                  if (mounted) {
                     _refreshConversations();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -991,17 +992,70 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _messagesService = MessagesService();
-  final _textController = TextEditingController();
+  final TextEditingController _textController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   List<Map<String, dynamic>> _messages = [];
   bool _isLoading = true;
+  StreamSubscription? _messagesSubscription;
+  Map<String, dynamic>? _otherUserData;
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMessages();
+    _loadOtherUserData();
+    
+    // Start periodic refresh to ensure online status updates
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) {
+        setState(() {}); // Force rebuild to update online status
+      }
+    });
+    
+    // Mark messages as read immediately when opening chat (only if conversation exists)
+    if (widget.conversationId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _messagesService.markMessagesAsRead(widget.conversationId!);
+        // Force refresh of conversations list to update unread counts
+        setState(() {});
+      });
+    }
+  }
+
+  void _loadOtherUserData() {
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.otherUser['id'])
+        .get()
+        .then((snapshot) {
+      if (snapshot.exists) {
+        setState(() {
+          _otherUserData = snapshot.data() as Map<String, dynamic>;
+        });
+      }
+    });
+  }
 
   void _loadMessages() {
     if (widget.conversationId != null) {
-      _messagesService.getMessagesStream(widget.conversationId!).listen((messages) {
+      _messagesSubscription?.cancel(); // Cancel previous subscription
+      _messagesSubscription = _messagesService.getMessagesStream(widget.conversationId!).listen((messages) {
         if (mounted) {
           setState(() {
-            _messages = messages.reversed.toList(); // Show oldest first
+            _messages = messages.toList(); // Show newest at bottom (no reverse needed)
             _isLoading = false;
+          });
+          
+          // Scroll to bottom to show latest messages - with delay to ensure ListView is built
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted && _scrollController.hasClients && _messages.isNotEmpty) {
+              _scrollController.animateTo(
+                _scrollController.position.maxScrollExtent,
+                duration: const Duration(milliseconds: 500),
+                curve: Curves.easeOut,
+              );
+            }
           });
         }
       });
@@ -1014,48 +1068,56 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _loadMessages();
-    // Mark messages as read immediately when opening chat (only if conversation exists)
-    if (widget.conversationId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _messagesService.markMessagesAsRead(widget.conversationId!);
-        // Force refresh of conversations list to update unread counts
-        setState(() {});
-      });
-    }
-  }
-
   Future<void> _sendMessage([String? value]) async {
     final text = (value ?? _textController.text).trim();
     if (text.isEmpty) return;
+    
     _textController.clear();
     setState(() {}); // Update send button state
+    
     final conversationId = widget.conversationId ?? widget.otherUser['id'];
-    final success = await _messagesService.sendMessage(conversationId, text);
-    if (success && mounted) {
-      setState(() {
-        _messages.add({
-          'id': 'local_${DateTime.now().millisecondsSinceEpoch}',
-          'senderId': FirebaseAuth.instance.currentUser!.uid,
-          'text': text,
-          'createdAt': Timestamp.now(),
-          'isRead': false,
-          'isCurrentUser': true,
-          'isEncrypted': true, // o false se non usi E2EE
-        });
+    
+    try {
+      final result = await _messagesService.sendMessage(conversationId, text);
+      
+      final success = result['success'] as bool;
+      final newConversationId = result['conversationId'] as String?;
+      
+      if (success && widget.conversationId == null && newConversationId != null) {
+        // If this was a new conversation, start listening to messages for the new conversation
+        _loadMessages(); // Force refresh to show new messages
+      }
+      
+      // Scroll to bottom after sending message
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
       });
+      
+      if (!success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Errore nell\'invio del messaggio'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Errore: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
     }
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Errore nell\'invio del messaggio'),
-          backgroundColor: AppTheme.errorColor,
-        ),
-      );
-    }
+    // Don't add message locally - let the stream handle it
   }
 
   String _formatMessageTime(dynamic timestamp) {
@@ -1063,6 +1125,23 @@ class _ChatScreenState extends State<ChatScreen> {
     
     final date = timestamp.toDate();
     return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatMessageDate(dynamic timestamp) {
+    if (timestamp == null) return '';
+    
+    final date = timestamp.toDate();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(date.year, date.month, date.day);
+    
+    if (messageDate == today) {
+      return 'Oggi alle ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } else if (messageDate == today.subtract(const Duration(days: 1))) {
+      return 'Ieri alle ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } else {
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} alle ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    }
   }
 
   void _showChatOptions() {
@@ -1146,7 +1225,10 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               onTap: () {
                 Navigator.pop(context);
-                _showDeleteConfirmation();
+                _showDeleteConfirmation({
+                  'conversationId': widget.conversationId,
+                  'otherUsername': widget.otherUser['username'],
+                });
               },
             ),
           ],
@@ -1345,22 +1427,59 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                    '@${widget.otherUser['username']}',
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/user-profile',
+                          arguments: {
+                            'userId': widget.otherUser['id'],
+                            'username': widget.otherUser['username'],
+                          },
+                        );
+                      },
+                      child: Text(
+                        '${widget.otherUser['username']}',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                        Text(
-                    'Online',
-                          style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 12,
-                          ),
-                        ),
-                      ],
+                    // Stato di attività in tempo reale
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(widget.otherUser['id'])
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData && snapshot.data!.exists) {
+                          final userData = snapshot.data!.data() as Map<String, dynamic>;
+                          final lastSeen = userData['lastSeen'] as Timestamp?;
+                          final isOnline = userData['isOnline'] as bool? ?? false;
+                          
+                          // Mostra "Online" solo se l'utente è effettivamente online
+                          if (isOnline && lastSeen != null) {
+                            final now = Timestamp.now();
+                            final difference = now.toDate().difference(lastSeen.toDate());
+                            // Considera online se l'ultima attività è stata negli ultimi 2 minuti
+                            if (difference.inMinutes < 2) {
+                              return Text(
+                                'Online',
+                                style: TextStyle(
+                                  color: AppTheme.limeAccent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              );
+                            }
+                          }
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ],
               ),
             ),
           ],
@@ -1435,14 +1554,30 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.all(20), // Increased padding
+                          padding: const EdgeInsets.all(20),
                           itemCount: _messages.length,
+                          controller: _scrollController,
+                          reverse: false, // Keep normal order (oldest to newest)
                           itemBuilder: (context, index) {
                             final message = _messages[index];
                             final isCurrentUser = message['isCurrentUser'];
+                            final messageId = message['id'] ?? index.toString(); // Get message ID for animation
                             
+                            // Auto-scroll to bottom when last message is built
+                            if (index == _messages.length - 1) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (_scrollController.hasClients) {
+                                  _scrollController.animateTo(
+                                    _scrollController.position.maxScrollExtent,
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeOut,
+                                  );
+                                }
+                              });
+                            }
+
                             return Container(
-                              margin: const EdgeInsets.only(bottom: 16), // Increased margin
+                              margin: const EdgeInsets.only(bottom: 8),
                               child: Row(
                                 mainAxisAlignment: isCurrentUser 
                                     ? MainAxisAlignment.end 
@@ -1451,7 +1586,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   if (!isCurrentUser) ...[
                                     ProfilePicture(
                                       userId: widget.otherUser['id'],
-                                      size: 32,
+                                      size: 28,
                                       showBorder: false,
                                     ),
                                     const SizedBox(width: 8),
@@ -1459,52 +1594,26 @@ class _ChatScreenState extends State<ChatScreen> {
                                   Flexible(
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 18, // Increased horizontal padding
-                                        vertical: 12, // Increased vertical padding
+                                        horizontal: 16,
+                                        vertical: 10,
                                       ),
                                       decoration: BoxDecoration(
                                         color: isCurrentUser 
                                             ? AppTheme.limeAccent 
                                             : AppTheme.surfaceDark,
-                                        borderRadius: BorderRadius.circular(20),
+                                        borderRadius: BorderRadius.circular(18),
                                       ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            message['text'],
-                                            style: TextStyle(
-                                              color: isCurrentUser 
-                                                  ? AppTheme.primaryDark 
-                                                  : AppTheme.textPrimary,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            _formatMessageTime(message['createdAt']),
-                                            style: TextStyle(
-                                              color: isCurrentUser 
-                                                  ? AppTheme.primaryDark.withOpacity(0.7)
-                                                  : AppTheme.textSecondary,
-                                              fontSize: 10,
-                                            ),
-                                          ),
-                                        ],
+                                      child: Text(
+                                        message['text'],
+                                        style: TextStyle(
+                                          color: isCurrentUser 
+                                              ? AppTheme.primaryDark 
+                                              : AppTheme.textPrimary,
+                                          fontSize: 15,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                  if (isCurrentUser) ...[
-                                    const SizedBox(width: 8),
-                                    CircleAvatar(
-                                      radius: 16,
-                                      backgroundColor: AppTheme.limeAccent.withOpacity(0.2),
-                                      child: const Icon(
-                                        Icons.person,
-                                        size: 16,
-                                        color: AppTheme.limeAccent,
-                                      ),
-                                    ),
-                                  ],
                                 ],
                               ),
                             );
@@ -1597,6 +1706,9 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _textController.dispose();
+    _scrollController.dispose();
+    _messagesSubscription?.cancel();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 } 
