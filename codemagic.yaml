@@ -31,7 +31,7 @@ workflows:
       vars:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "com.example.zapItMobile"
+        BUNDLE_ID: "com.zapit.mobile"
         FLUTTER_VERSION: "stable"
       flutter: stable
       xcode: latest
@@ -54,7 +54,7 @@ workflows:
       vars:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "com.example.zapItMobile"
+        BUNDLE_ID: "com.zapit.mobile"
         FLUTTER_VERSION: "stable"
       flutter: stable
       xcode: latest
@@ -62,7 +62,7 @@ workflows:
       ios_signing:
         - name: "iOS Distribution"
           type: "app-store"
-          bundle_identifier: "com.example.zapItMobile"
+          bundle_identifier: "com.zapit.mobile"
           team_id: "YOUR_TEAM_ID"
           provisioning_profile: "YOUR_PROVISIONING_PROFILE"
           certificate: "YOUR_CERTIFICATE"
@@ -84,7 +84,7 @@ workflows:
       vars:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "com.example.zapItMobile"
+        BUNDLE_ID: "com.zapit.mobile"
         FLUTTER_VERSION: "stable"
       flutter: stable
       xcode: latest
