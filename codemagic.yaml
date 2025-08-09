@@ -75,11 +75,11 @@ workflows:
       - build/**/outputs/**/mapping.txt
       - /tmp/bitrise_upload_dir/*.aab
       - flutter_drive.log
-    publishing:
-      google_play:
-        track: internal
-        submit_as_draft: true
-        credentials: encrypted($GOOGLE_PLAY_CREDENTIALS)
+    # publishing:
+    #   google_play:
+    #     track: internal
+    #     submit_as_draft: true
+    #     credentials: $GOOGLE_PLAY_CREDENTIALS
 
   web-workflow:
     name: Web Build
