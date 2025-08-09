@@ -31,6 +31,10 @@ class AppTheme {
       brightness: Brightness.dark,
       primaryColor: limeAccent,
       scaffoldBackgroundColor: primaryDark,
+      // Add fallback colors to prevent black screen
+      canvasColor: primaryDark,
+      cardColor: surfaceDark,
+      dialogBackgroundColor: surfaceDark,
       colorScheme: const ColorScheme.dark(
         primary: limeAccent,
         secondary: limeAccent,
@@ -42,12 +46,32 @@ class AppTheme {
         onSurface: textPrimary,
         onBackground: textPrimary,
         onError: textPrimary,
+        // Add more color scheme properties for better compatibility
+        brightness: Brightness.dark,
+        primaryContainer: surfaceDark,
+        secondaryContainer: surfaceDark,
+        tertiary: limeAccent,
+        onPrimaryContainer: textPrimary,
+        onSecondaryContainer: textPrimary,
+        onTertiary: primaryDark,
+        outline: textSecondary,
+        outlineVariant: textSecondary.withOpacity(0.5),
+        shadow: Colors.black,
+        scrim: Colors.black,
+        inversePrimary: primaryDark,
+        inverseSurface: textPrimary,
+        onInverseSurface: primaryDark,
+        inversePrimaryContainer: textPrimary,
+        onInversePrimaryContainer: primaryDark,
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: primaryDark,
         foregroundColor: textPrimary,
         elevation: 0,
         centerTitle: true,
+        // Add more app bar properties for better compatibility
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.black,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -61,6 +85,9 @@ class AppTheme {
             fontSize: 16,
             fontWeight: FontWeight.w600,
           ),
+          // Add more button properties for better compatibility
+          elevation: 2,
+          shadowColor: Colors.black,
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -84,6 +111,9 @@ class AppTheme {
         ),
         labelStyle: const TextStyle(color: textSecondary),
         hintStyle: const TextStyle(color: textSecondary),
+        // Add more input properties for better compatibility
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        isDense: true,
       ),
       textTheme: const TextTheme(
         displayLarge: TextStyle(
@@ -98,6 +128,11 @@ class AppTheme {
         ),
         displaySmall: TextStyle(
           fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: textPrimary,
+        ),
+        headlineLarge: TextStyle(
+          fontSize: 22,
           fontWeight: FontWeight.w600,
           color: textPrimary,
         ),
@@ -106,15 +141,76 @@ class AppTheme {
           fontWeight: FontWeight.w600,
           color: textPrimary,
         ),
+        headlineSmall: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: textPrimary,
+        ),
+        titleLarge: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: textPrimary,
+        ),
+        titleMedium: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: textPrimary,
+        ),
+        titleSmall: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: textPrimary,
+        ),
         bodyLarge: TextStyle(
           fontSize: 16,
           color: textPrimary,
         ),
         bodyMedium: TextStyle(
           fontSize: 14,
+          color: textPrimary,
+        ),
+        bodySmall: TextStyle(
+          fontSize: 12,
+          color: textSecondary,
+        ),
+        labelLarge: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: textPrimary,
+        ),
+        labelMedium: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: textSecondary,
+        ),
+        labelSmall: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
           color: textSecondary,
         ),
       ),
+      // Add more theme properties for better compatibility
+      dividerTheme: const DividerThemeData(
+        color: textSecondary,
+        thickness: 1,
+        space: 1,
+      ),
+      iconTheme: const IconThemeData(
+        color: textPrimary,
+        size: 24,
+      ),
+      cardTheme: CardTheme(
+        color: surfaceDark,
+        elevation: 2,
+        shadowColor: Colors.black,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      // Ensure proper color scheme for all components
+      useMaterial3: true,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      visualDensity: VisualDensity.standard,
     );
   }
 } 

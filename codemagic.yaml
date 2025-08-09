@@ -10,17 +10,17 @@ workflows:
       flutter: stable
       xcode: latest
       cocoapods: default
-     scripts:
-       - name: Set up code signing settings on Xcode project
-         script: |
-           keychain initialize
-           app-store-connect fetch-signing-files "$BUNDLE_ID" \
-             --type IOS_APP_STORE \
-             --create \
-             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
-           xcode-project use-profiles
+    scripts:
+      - name: Set up code signing settings on Xcode project
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
+          xcode-project use-profiles
       - name: Get Flutter packages
         script: flutter pub get
       - name: Flutter build ipa for App Store
