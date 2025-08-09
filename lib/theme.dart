@@ -62,8 +62,6 @@ class AppTheme {
         inversePrimary: primaryDark,
         inverseSurface: textPrimary,
         onInverseSurface: primaryDark,
-        inversePrimaryContainer: textPrimary,
-        onInversePrimaryContainer: primaryDark,
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: primaryDark,
