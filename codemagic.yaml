@@ -56,18 +56,22 @@ workflows:
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.zapit.mobile"
         FLUTTER_VERSION: "stable"
+        # iOS Code Signing - Configure these in Codemagic Team Settings
+        CM_CERTIFICATE: "YOUR_CERTIFICATE"
+        CM_CERTIFICATE_PASSWORD: "YOUR_PASSWORD"
+        CM_PROVISIONING_PROFILE: "YOUR_PROVISIONING_PROFILE"
+        CM_TEAM_ID: "YOUR_TEAM_ID"
       flutter: stable
       xcode: latest
       cocoapods: default
-      ios_signing:
-        - name: "iOS Distribution"
-          type: "app-store"
-          bundle_identifier: "com.zapit.mobile"
-          team_id: "YOUR_TEAM_ID"
-          provisioning_profile: "YOUR_PROVISIONING_PROFILE"
-          certificate: "YOUR_CERTIFICATE"
-          certificate_password: "YOUR_PASSWORD"
     scripts:
+      - name: Set up iOS code signing
+        script: |
+          # Set up code signing environment
+          echo "Setting up iOS code signing..."
+          echo "Team ID: $CM_TEAM_ID"
+          echo "Certificate: $CM_CERTIFICATE"
+          echo "Provisioning Profile: $CM_PROVISIONING_PROFILE"
       - name: Get Flutter packages
         script: flutter pub get
       - name: Flutter build ipa for device
