@@ -33,6 +33,7 @@ workflows:
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.zapit.mobile"
         FLUTTER_VERSION: "stable"
+        CM_TEAM_ID: "K83636P9VT"
       flutter: stable
       xcode: latest
       cocoapods: default
@@ -44,6 +45,13 @@ workflows:
           flutter build ipa --debug \
             --target=lib/main_debug.dart \
             --no-codesign
+      - name: Verify IPA creation
+        script: |
+          echo "=== Checking for IPA files ==="
+          find build/ios -name "*.ipa" -type f
+          ls -la build/ios/ipa/ || echo "IPA directory not found"
+          echo "=== Build directory contents ==="
+          ls -la build/ios/
     artifacts:
       - build/ios/ipa/*.ipa
       - flutter_drive.log
