@@ -1,3 +1,15 @@
+# Codemagic CI/CD Configuration
+# 
+# iOS Workflows:
+# - ios-development: For testing builds without code signing (use this first)
+# - ios-workflow: For release builds (requires proper code signing setup)
+# 
+# Android Workflows:
+# - android-workflow: For Android APK and App Bundle builds
+# 
+# Web Workflows:
+# - web-workflow: For web builds
+
 workflows:
   ios-development:
     name: iOS Development Build
@@ -22,53 +34,26 @@ workflows:
       - flutter_drive.log
 
   ios-workflow:
-    name: iOS App Store Build
+    name: iOS Release Build
     environment:
       vars:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "stable"
-        # App Store Connect API credentials
-        APP_STORE_CONNECT_ISSUER_ID: $APP_STORE_CONNECT_ISSUER_ID
-        APP_STORE_CONNECT_KEY_IDENTIFIER: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        APP_STORE_CONNECT_PRIVATE_KEY: $APP_STORE_CONNECT_PRIVATE_KEY
       flutter: stable
       xcode: latest
       cocoapods: default
     scripts:
-      - name: Set up code signing settings on Xcode project
-        script: |
-          keychain initialize
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
-          xcode-project use-profiles
       - name: Get Flutter packages
         script: flutter pub get
-      - name: Flutter build ipa for App Store
+      - name: Flutter build ipa for release
         script: |
           flutter build ipa --release \
-            --export-options-plist=ios/exportOptions.plist \
-            --target=lib/main_prod.dart
-      - name: Build IPA for ad-hoc distribution
-        script: |
-          flutter build ipa --release \
-            --export-options-plist=ios/exportOptions-adhoc.plist \
             --target=lib/main_prod.dart
     artifacts:
       - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
       - flutter_drive.log
-    publishing:
-      app_store_connect:
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        submit_to_testflight: true
 
   android-workflow:
     name: Android Build
