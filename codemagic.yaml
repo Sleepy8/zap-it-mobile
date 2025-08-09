@@ -14,7 +14,7 @@ workflows:
       - name: Set up code signing settings on Xcode project
         script: |
           keychain initialize
-          app-store-connect fetch-signing-files "com.example.zapItMobile" --type IOS_APP_STORE --create
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
           xcode-project use-profiles
       - name: Get Flutter packages
         script: flutter pub get
