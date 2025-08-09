@@ -10,8 +10,8 @@ workflows:
       flutter: stable
       xcode: latest
       cocoapods: default
-    scripts:
-             - name: Set up code signing settings on Xcode project
+         scripts:
+       - name: Set up code signing settings on Xcode project
          script: |
            keychain initialize
            app-store-connect fetch-signing-files "$BUNDLE_ID" \
