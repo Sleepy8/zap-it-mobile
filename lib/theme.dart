@@ -207,7 +207,6 @@ class AppTheme {
         ),
       ),
       // Ensure proper color scheme for all components
-      useMaterial3: true,
       materialTapTargetSize: MaterialTapTargetSize.padded,
       visualDensity: VisualDensity.standard,
     );
