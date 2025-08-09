@@ -1,8 +1,14 @@
 # Codemagic CI/CD Configuration
 # 
 # iOS Workflows:
-# - ios-development: For testing builds without code signing (use this first)
-# - ios-workflow: For release builds (requires proper code signing setup)
+# - ios-development: For testing IPA builds without code signing (use this first)
+# - ios-workflow: For simulator builds (no code signing required)
+# 
+# Note: For device builds and App Store deployment, you'll need:
+# 1. Apple Developer Account
+# 2. Code signing certificates
+# 3. Provisioning profiles
+# 4. App Store Connect API credentials
 # 
 # Android Workflows:
 # - android-workflow: For Android APK and App Bundle builds
@@ -34,7 +40,7 @@ workflows:
       - flutter_drive.log
 
   ios-workflow:
-    name: iOS Release Build
+    name: iOS Simulator Build
     environment:
       vars:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
@@ -47,12 +53,22 @@ workflows:
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
-      - name: Flutter build ipa for release
+      - name: Flutter build for iOS simulator
         script: |
-          flutter build ipa --release \
-            --target=lib/main_prod.dart
+          flutter build ios --debug \
+            --target=lib/main_debug.dart \
+            --simulator
+      - name: Create simulator build archive
+        script: |
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 14,OS=latest' \
+            -derivedDataPath build \
+            build
     artifacts:
-      - build/ios/ipa/*.ipa
+      - ios/build/**/*.app
       - flutter_drive.log
 
   android-workflow:
