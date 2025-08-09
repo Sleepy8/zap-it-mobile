@@ -16,6 +16,7 @@ import 'screens/privacy_settings_screen.dart';
 import 'screens/notification_settings_screen.dart';
 import 'screens/edit_profile_screen.dart';
 import 'screens/test_screen.dart';
+import 'screens/fallback_screen.dart';
 import 'debug_helper.dart';
 
 void main() async {
