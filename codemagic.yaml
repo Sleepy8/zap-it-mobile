@@ -2,13 +2,21 @@
 # 
 # iOS Workflows:
 # - ios-development: For testing IPA builds without code signing (use this first)
+# - ios-device-build: For device IPA builds with code signing (requires Apple Developer Account)
 # - ios-workflow: For simulator builds (no code signing required)
 # 
 # Note: For device builds and App Store deployment, you'll need:
-# 1. Apple Developer Account
+# 1. Apple Developer Account ($99/year or free with limitations)
 # 2. Code signing certificates
 # 3. Provisioning profiles
 # 4. App Store Connect API credentials
+# 
+# To use ios-device-build workflow:
+# 1. Replace YOUR_TEAM_ID with your Apple Developer Team ID
+# 2. Replace YOUR_PROVISIONING_PROFILE with your provisioning profile name
+# 3. Replace YOUR_CERTIFICATE with your certificate name
+# 4. Replace YOUR_PASSWORD with your certificate password
+# 5. Configure these in Codemagic Team Settings > Code signing identities
 # 
 # Android Workflows:
 # - android-workflow: For Android APK and App Bundle builds
@@ -18,7 +26,7 @@
 
 workflows:
   ios-development:
-    name: iOS Development Build
+    name: iOS Development Build (No Code Signing)
     environment:
       vars:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
@@ -31,9 +39,40 @@ workflows:
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
-      - name: Flutter build ipa for development
+      - name: Flutter build ipa for development (no code signing)
         script: |
           flutter build ipa --debug \
+            --target=lib/main_debug.dart \
+            --no-codesign
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - flutter_drive.log
+
+  ios-device-build:
+    name: iOS Device Build (Code Signed)
+    environment:
+      vars:
+        XCODE_PROJECT: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+        BUNDLE_ID: "com.example.zapItMobile"
+        FLUTTER_VERSION: "stable"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        - name: "iOS Distribution"
+          type: "app-store"
+          bundle_identifier: "com.example.zapItMobile"
+          team_id: "YOUR_TEAM_ID"
+          provisioning_profile: "YOUR_PROVISIONING_PROFILE"
+          certificate: "YOUR_CERTIFICATE"
+          certificate_password: "YOUR_PASSWORD"
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Flutter build ipa for device
+        script: |
+          flutter build ipa --release \
             --target=lib/main_debug.dart
     artifacts:
       - build/ios/ipa/*.ipa
