@@ -7,6 +7,7 @@ class AppTheme {
   static const Color limeAccent = Color(0xFFCFFF04);
   static const Color textPrimary = Color(0xFFFFFFFF);
   static const Color textSecondary = Color(0xFFB3B3B3);
+  static const Color textSecondaryDimmed = Color(0x80B3B3B3); // textSecondary with 0.5 opacity
   static const Color surfaceDark = Color(0xFF1E1E1E);
   static const Color errorColor = Color(0xFFCF6679);
   static const Color warningColor = Color(0xFFFF9800);
@@ -55,7 +56,7 @@ class AppTheme {
         onSecondaryContainer: textPrimary,
         onTertiary: primaryDark,
         outline: textSecondary,
-        outlineVariant: textSecondary.withOpacity(0.5),
+        outlineVariant: textSecondaryDimmed,
         shadow: Colors.black,
         scrim: Colors.black,
         inversePrimary: primaryDark,
