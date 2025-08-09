@@ -1,12 +1,38 @@
 workflows:
-  ios-workflow:
-    name: iOS Build
+  ios-development:
+    name: iOS Development Build
     environment:
       vars:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "stable"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Flutter build ipa for development
+        script: |
+          flutter build ipa --debug \
+            --target=lib/main_debug.dart
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - flutter_drive.log
+
+  ios-workflow:
+    name: iOS App Store Build
+    environment:
+      vars:
+        XCODE_PROJECT: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+        BUNDLE_ID: "com.example.zapItMobile"
+        FLUTTER_VERSION: "stable"
+        # App Store Connect API credentials
+        APP_STORE_CONNECT_ISSUER_ID: $APP_STORE_CONNECT_ISSUER_ID
+        APP_STORE_CONNECT_KEY_IDENTIFIER: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        APP_STORE_CONNECT_PRIVATE_KEY: $APP_STORE_CONNECT_PRIVATE_KEY
       flutter: stable
       xcode: latest
       cocoapods: default
