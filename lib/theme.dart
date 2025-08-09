@@ -198,7 +198,7 @@ class AppTheme {
         color: textPrimary,
         size: 24,
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: surfaceDark,
         elevation: 2,
         shadowColor: Colors.black,
