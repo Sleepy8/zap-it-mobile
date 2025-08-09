@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import 'dart:developer' as developer;
 import 'package:flutter/services.dart';
@@ -26,13 +23,14 @@ import 'widgets/animated_logo.dart';
 import 'services/notification_service.dart';
 import 'services/online_status_service.dart';
 import 'debug_helper.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Enable debug logging in debug mode
   if (kDebugMode) {
-    DebugHelper.log('App starting in debug mode');
+    DebugHelper.log('App starting in ULTRA SIMPLE mode');
     DebugHelper.logPlatformInfo();
   }
   
@@ -226,50 +224,12 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    // Use StreamBuilder to listen to Firebase Auth state changes (Instagram style)
     return StreamBuilder<User?>(
-      stream: getFirebaseAuthStream(), // Use the safe stream function
+      stream: _authService.authStateChanges(),
       builder: (context, snapshot) {
-        // Show loading while checking auth state
-        if (snapshot.connectionState == ConnectionState.waiting && !_isInitialized) {
-          return Scaffold(
-            backgroundColor: AppTheme.primaryDark,
-            body: SafeArea(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    AnimatedLogo(
-                      size: 130,
-                      isSplashScreen: true,
-                      showText: true,
-                    ),
-                    const SizedBox(height: 30),
-                    const Text(
-                      'Zap It',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.limeAccent,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Caricamento...',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white70,
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                    const CircularProgressIndicator(
-                      color: AppTheme.limeAccent,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
+        // Show loading screen while initializing
+        if (!_isInitialized) {
+          return const SplashScreen();
         }
         
         // Handle error state or timeout

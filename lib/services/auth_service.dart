@@ -9,6 +9,7 @@ abstract class AuthService {
   Future<bool> isLoggedIn();
   User? getCurrentUser();
   Future<bool> forceRefreshSession();
+  Stream<User?> authStateChanges();
 }
 
 class AuthServiceFirebaseImpl implements AuthService {
@@ -127,6 +128,11 @@ class AuthServiceFirebaseImpl implements AuthService {
     } catch (e) {
       return false;
     }
+  }
+
+  @override
+  Stream<User?> authStateChanges() {
+    return _auth.authStateChanges();
   }
 
 

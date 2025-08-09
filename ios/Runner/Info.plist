@@ -28,7 +28,10 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
-
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -36,26 +39,6 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
-	<key>MTL_ENABLE_DEBUG_INFO</key>
-	<false/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<false/>
-	<key>UIStatusBarHidden</key>
-	<false/>
-	<key>UIRequiresFullScreen</key>
-	<false/>
-	<key>UIStatusBarStyle</key>
-	<string>UIStatusBarStyleDefault</string>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-	</array>
-	<key>UIUserInterfaceStyle</key>
-	<string>Light</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -73,57 +56,24 @@
 			</array>
 		</dict>
 	</dict>
-	
-	<!-- Permessi per notifiche push -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
 		<string>background-processing</string>
 		<string>background-fetch</string>
 	</array>
-	
-	<!-- Permessi per fotocamera e galleria -->
 	<key>NSCameraUsageDescription</key>
 	<string>Questa app necessita dell'accesso alla fotocamera per scattare foto del profilo</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Questa app necessita dell'accesso alla galleria per selezionare foto del profilo</string>
-	
-	<!-- Permessi per vibrazione -->
 	<key>NSHapticFeedbackUsageDescription</key>
 	<string>Questa app utilizza la vibrazione per creare pattern personalizzati</string>
-	
-	<!-- Permessi per microfono (se necessario per future funzionalità) -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Questa app potrebbe necessitare del microfono per funzionalità audio</string>
-	
-	<!-- Permessi per rete -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
-	
-	<!-- Configurazioni per migliorare la stabilità -->
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-	<key>UIRequiresFullScreen</key>
-	<false/>
-	<key>UIStatusBarHidden</key>
-	<false/>
-	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<false/>
-	
-	<!-- Configurazioni per notifiche locali -->
-	<key>NSUserNotificationAlertStyle</key>
-	<string>alert</string>
-	
-	<!-- Configurazioni per background app refresh -->
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-		<string>background-processing</string>
-		<string>background-fetch</string>
-		<string>audio</string>
-	</array>
 </dict>
 </plist>
