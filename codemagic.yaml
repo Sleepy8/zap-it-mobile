@@ -7,10 +7,10 @@ workflows:
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "stable"
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-         scripts:
+             flutter: stable
+       xcode: latest
+       cocoapods: default
+     scripts:
        - name: Set up code signing settings on Xcode project
          script: |
            keychain initialize
