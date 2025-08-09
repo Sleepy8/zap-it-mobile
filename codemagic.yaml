@@ -79,7 +79,7 @@ workflows:
       google_play:
         track: internal
         submit_as_draft: true
-        credentials: $GOOGLE_PLAY_CREDENTIALS
+        credentials: encrypted($GOOGLE_PLAY_CREDENTIALS)
 
   web-workflow:
     name: Web Build
