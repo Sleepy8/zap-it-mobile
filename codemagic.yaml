@@ -1,15 +1,15 @@
 workflows:
   ios-workflow:
     name: iOS Build
-         environment:
-       vars:
-         XCODE_PROJECT: "ios/Runner.xcworkspace"
-         XCODE_SCHEME: "Runner"
-         BUNDLE_ID: "com.example.zapItMobile"
-         FLUTTER_VERSION: "stable"
-       flutter: stable
-       xcode: latest
-       cocoapods: default
+    environment:
+      vars:
+        XCODE_PROJECT: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+        BUNDLE_ID: "com.example.zapItMobile"
+        FLUTTER_VERSION: "stable"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
      scripts:
        - name: Set up code signing settings on Xcode project
          script: |
