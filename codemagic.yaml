@@ -63,6 +63,17 @@ workflows:
           echo "Code signing setup completed"
           echo "Checking if certificates are available..."
           security find-identity -v -p codesigning || echo "No certificates found"
+      - name: Configure Xcode project code signing
+        script: |
+          # Configure code signing in the Xcode project
+          echo "Configuring code signing in Xcode project..."
+          xcode-project set-project-settings \
+            --project "$XCODE_PROJECT" \
+            --target "Runner" \
+            --build-setting "CODE_SIGN_STYLE=Manual" \
+            --build-setting "DEVELOPMENT_TEAM=$CM_TEAM_ID" \
+            --build-setting "PROVISIONING_PROFILE_SPECIFIER=$CM_PROVISIONING_PROFILE" \
+            --build-setting "CODE_SIGN_IDENTITY=iPhone Developer"
       - name: Build IPA using Xcode
         script: |
           # Build IPA using Xcode directly with code signing
