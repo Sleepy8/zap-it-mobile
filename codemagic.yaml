@@ -35,8 +35,8 @@ workflows:
         FLUTTER_VERSION: "stable"
         CM_TEAM_ID: "K83636P9VT"
         # iOS Code Signing - Configure these in Codemagic Team Settings
-        CM_CERTIFICATE: "Francesco Congiusta"
-        CM_CERTIFICATE_PASSWORD: "!Quikit2025"
+        CM_CERTIFICATE: "Zap It"
+        CM_CERTIFICATE_PASSWORD: "2a7rhj0U"
         CM_PROVISIONING_PROFILE: "Zap it Development"
       flutter: stable
       xcode: latest
@@ -164,8 +164,8 @@ workflows:
         BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "stable"
         # iOS Code Signing - Configure these in Codemagic Team Settings
-        CM_CERTIFICATE: "Francesco Congiusta"
-        CM_CERTIFICATE_PASSWORD: "!Quikit2025"
+        CM_CERTIFICATE: "Zap It"
+        CM_CERTIFICATE_PASSWORD: "2a7rhj0U"
         CM_PROVISIONING_PROFILE: "Zap it Development"
         CM_TEAM_ID: "K83636P9VT"
       flutter: stable
