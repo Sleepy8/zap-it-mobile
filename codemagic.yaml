@@ -3,8 +3,6 @@ workflows:
     name: iOS Development Build
     environment:
       vars:
-        XCODE_PROJECT: "ios/Runner.xcodeproj"
-        XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.example.zapItMobile"
       flutter: stable
       xcode: latest
@@ -19,141 +17,33 @@ workflows:
         script: flutter pub get
       - name: Install CocoaPods
         script: pod install --project-directory=ios
-      - name: Set up code signing
+      - name: Build Flutter iOS (no codesign)
+        script: flutter build ios --release --no-codesign
+      - name: Extract signing info
         script: |
-          echo "=== Code Signing Configuration ==="
-          security find-identity -v -p codesigning
-          echo "Provisioning profiles:"
-          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/"
-          
-          CERT_NAME=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
-          echo "Certificate name: $CERT_NAME"
-          
-          PROFILE_PATH=$(ls "$HOME/Library/MobileDevice/Provisioning Profiles"/*.mobileprovision | head -1)
+          PROFILE_PATH=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision" | head -1)
           TEAM_ID=$(security cms -D -i "$PROFILE_PATH" | plutil -extract TeamIdentifier.0 raw -)
-          echo "Team ID: $TEAM_ID"
-          
-          echo "export CODE_SIGN_IDENTITY=\"$CERT_NAME\"" >> $CM_ENV
+          CERT_NAME=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
           echo "export DEVELOPMENT_TEAM=\"$TEAM_ID\"" >> $CM_ENV
-      - name: Configure Xcode project
+          echo "export CODE_SIGN_IDENTITY=\"$CERT_NAME\"" >> $CM_ENV
+          echo "export PROFILE_NAME=\"Zap it Development\"" >> $CM_ENV
+      - name: Archive with xcodebuild (manual signing)
         script: |
           cd ios
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' "s/DEVELOPMENT_TEAM = \"\"/DEVELOPMENT_TEAM = \"$DEVELOPMENT_TEAM\"/g" Runner.xcodeproj/project.pbxproj
-          echo "Project configured for manual signing"
-      - name: Create ExportOptions plist
-        script: |
-          cat > ios/ExportOptions.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>development</string>
-            <key>teamID</key>
-            <string>$DEVELOPMENT_TEAM</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>$BUNDLE_ID</key>
-              <string>Zap it Development</string>
-            </dict>
-            <key>signingStyle</key>
-            <string>manual</string>
-          </dict>
-          </plist>
-          EOF
-      - name: Build Flutter IPA
-        script: |
-          flutter build ipa --release --verbose --export-options-plist=ios/ExportOptions.plist
-      - name: Verify IPA
-        script: |
-          find build -name "*.ipa" -type f || echo "No IPA files found"
-          if [ -d "build/ios/ipa" ]; then
-            ls -la build/ios/ipa/
-          fi
-    artifacts:
-      - build/ios/ipa/*.ipa
-
-  ios-development-simple:
-    name: iOS Development Simple
-    environment:
-      vars:
-        BUNDLE_ID: "com.example.zapItMobile"
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-      ios_signing:
-        certificates:
-          - Zap It
-        provisioning_profiles:
-          - Zap it Development
-    scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Install CocoaPods
-        script: pod install --project-directory=ios
-      - name: Build with xcode-project CLI
-        script: xcode-project build-ipa --project ios/Runner.xcodeproj --scheme Runner --code-signing-style manual
-    artifacts:
-      - build/ios/ipa/*.ipa
-
-  ios-development-basic:
-    name: iOS Development Basic
-    environment:
-      vars:
-        BUNDLE_ID: "com.example.zapItMobile"
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-      ios_signing:
-        certificates:
-          - Zap It
-        provisioning_profiles:
-          - Zap it Development
-    scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Install CocoaPods
-        script: pod install --project-directory=ios
-      - name: Build Flutter IPA with export method only
-        script: |
-          flutter build ipa --release --verbose --export-method=development
-    artifacts:
-      - build/ios/ipa/*.ipa
-
-  ios-development-direct:
-    name: iOS Development Direct
-    environment:
-      vars:
-        BUNDLE_ID: "com.example.zapItMobile"
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-      ios_signing:
-        certificates:
-          - Zap It
-        provisioning_profiles:
-          - Zap it Development
-    scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Install CocoaPods
-        script: pod install --project-directory=ios
-      - name: Get signing info
-        script: |
-          CERT_NAME=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
-          PROFILE_PATH=$(ls "$HOME/Library/MobileDevice/Provisioning Profiles"/*.mobileprovision | head -1)
-          TEAM_ID=$(security cms -D -i "$PROFILE_PATH" | plutil -extract TeamIdentifier.0 raw -)
-          echo "Certificate: $CERT_NAME"
-          echo "Team ID: $TEAM_ID"
-          echo "export CODE_SIGN_IDENTITY=\"$CERT_NAME\"" >> $CM_ENV
-          echo "export DEVELOPMENT_TEAM=\"$TEAM_ID\"" >> $CM_ENV
-      - name: Build with xcodebuild
+          xcodebuild clean -project Runner.xcodeproj -scheme Runner -configuration Release
+          xcodebuild archive \
+            -project Runner.xcodeproj \
+            -scheme Runner \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath ../build/ios/Runner.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+            CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME"
+      - name: Export IPA
         script: |
           cd ios
-          xcodebuild clean -project Runner.xcodeproj -scheme Runner
-          xcodebuild archive -project Runner.xcodeproj -scheme Runner -configuration Release -destination 'generic/platform=iOS' -archivePath ../build/ios/Runner.xcarchive CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" PROVISIONING_PROFILE_SPECIFIER="Zap it Development"
-          
           cat > ExportOptions.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -166,16 +56,17 @@ workflows:
             <key>provisioningProfiles</key>
             <dict>
               <key>$BUNDLE_ID</key>
-              <string>Zap it Development</string>
+              <string>$PROFILE_NAME</string>
             </dict>
             <key>signingStyle</key>
             <string>manual</string>
           </dict>
           </plist>
           EOF
-          
           mkdir -p ../build/ios/ipa
-          xcodebuild -exportArchive -archivePath ../build/ios/Runner.xcarchive -exportPath ../build/ios/ipa -exportOptionsPlist ExportOptions.plist
+          xcodebuild -exportArchive \
+            -archivePath ../build/ios/Runner.xcarchive \
+            -exportPath ../build/ios/ipa \
+            -exportOptionsPlist ExportOptions.plist
     artifacts:
       - build/ios/ipa/*.ipa
-      - build/ios/Runner.xcarchive/**/*
