@@ -31,7 +31,7 @@ workflows:
       vars:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "com.zapit.mobile"
+        BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "stable"
         CM_TEAM_ID: "K83636P9VT"
         # iOS Code Signing - Configure these in Codemagic Team Settings
@@ -73,7 +73,7 @@ workflows:
       vars:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "com.zapit.mobile"
+        BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "stable"
       flutter: stable
       xcode: latest
@@ -102,7 +102,7 @@ workflows:
       vars:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "com.zapit.mobile"
+        BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "stable"
         # iOS Code Signing - Configure these in Codemagic Team Settings
         CM_CERTIFICATE: "Quikit"
@@ -136,7 +136,7 @@ workflows:
       vars:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "com.zapit.mobile"
+        BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "stable"
       flutter: stable
       xcode: latest
@@ -218,3 +218,5 @@ workflows:
     artifacts:
       - build/web/**
       - flutter_drive.log 
+
+
