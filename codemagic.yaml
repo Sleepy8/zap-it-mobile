@@ -1,29 +1,3 @@
-# Codemagic CI/CD Configuration
-# 
-# iOS Workflows:
-# - ios-development: For testing IPA builds without code signing (use this first)
-# - ios-device-build: For device IPA builds with code signing (requires Apple Developer Account)
-# - ios-workflow: For simulator builds (no code signing required)
-# 
-# Note: For device builds and App Store deployment, you'll need:
-# 1. Apple Developer Account ($99/year or free with limitations)
-# 2. Code signing certificates
-# 3. Provisioning profiles
-# 4. App Store Connect API credentials
-# 
-# To use ios-device-build workflow:
-# 1. Replace YOUR_TEAM_ID with your Apple Developer Team ID
-# 2. Replace YOUR_PROVISIONING_PROFILE with your provisioning profile name
-# 3. Replace YOUR_CERTIFICATE with your certificate name
-# 4. Replace YOUR_PASSWORD with your certificate password
-# 5. Configure these in Codemagic Team Settings > Code signing identities
-# 
-# Android Workflows:
-# - android-workflow: For Android APK and App Bundle builds
-# 
-# Web Workflows:
-# - web-workflow: For web builds
-
 workflows:
   ios-development:
     name: iOS Development Build
@@ -32,248 +6,42 @@ workflows:
         XCODE_PROJECT: "ios/Runner.xcodeproj"
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.example.zapItMobile"
-        FLUTTER_VERSION: "stable"
-        CM_TEAM_ID: "K83636P9VT"
-        # iOS Code Signing - Configure these in Codemagic Team Settings
-        CM_CERTIFICATE: "Zap It"
-        CM_CERTIFICATE_PASSWORD: "2a7rhj0U"
-        CM_PROVISIONING_PROFILE: "Zap it Development"
       flutter: stable
       xcode: latest
       cocoapods: default
+      ios_signing:
+        certificates:
+          - dev_cert_reference
+        provisioning_profiles:
+          - dev_profile_reference
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
-      - name: Set up iOS code signing for development
+      - name: Install CocoaPods
+        script: pod install --project-directory=ios
+      - name: Apply Development profiles
         script: |
-          # Set up code signing environment for development
-          echo "Setting up iOS code signing for development..."
-          echo "Team ID: $CM_TEAM_ID"
-          echo "Certificate: $CM_CERTIFICATE"
-          echo "Provisioning Profile: $CM_PROVISIONING_PROFILE"
-      - name: Set up code signing settings
+          echo "Applying Development profiles…"
+          xcode-project use-profiles --archive-method=development --code-signing-setup-verbose-logging
+      - name: Build IPA (Development)
         script: |
-          # Set up code signing using Codemagic's built-in commands
-          echo "Setting up code signing with certificates..."
-          echo "Available environment variables:"
-          echo "CM_CERTIFICATE: $CM_CERTIFICATE"
-          echo "CM_PROVISIONING_PROFILE: $CM_PROVISIONING_PROFILE"
-          echo "CM_TEAM_ID: $CM_TEAM_ID"
-          xcode-project use-profiles
-          echo "Code signing setup completed"
-          echo "Checking if certificates are available..."
-          security find-identity -v -p codesigning || echo "No certificates found"
-      - name: Configure Xcode project code signing
-        script: |
-          # Configure code signing in the Xcode project using sed
-          echo "Configuring code signing in Xcode project..."
-          echo "Current working directory: $(pwd)"
-          echo "Checking if project file exists:"
-          ls -la ios/Runner.xcodeproj/project.pbxproj
-          
-          # Backup original file
-          cp ios/Runner.xcodeproj/project.pbxproj ios/Runner.xcodeproj/project.pbxproj.backup
-          
-          # Force code signing configuration using sed
-          echo "Setting code signing settings with sed..."
-          
-          # Set CODE_SIGN_STYLE=Manual
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGN_STYLE = "Automatic";/CODE_SIGN_STYLE = "Manual";/g' ios/Runner.xcodeproj/project.pbxproj
-          
-          # Set DEVELOPMENT_TEAM
-          sed -i '' 's/DEVELOPMENT_TEAM = "";/DEVELOPMENT_TEAM = "'$CM_TEAM_ID'";/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/DEVELOPMENT_TEAM = ".*";/DEVELOPMENT_TEAM = "'$CM_TEAM_ID'";/g' ios/Runner.xcodeproj/project.pbxproj
-          
-          # Set PROVISIONING_PROFILE_SPECIFIER
-          sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = "";/PROVISIONING_PROFILE_SPECIFIER = "'$CM_PROVISIONING_PROFILE'";/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = ".*";/PROVISIONING_PROFILE_SPECIFIER = "'$CM_PROVISIONING_PROFILE'";/g' ios/Runner.xcodeproj/project.pbxproj
-          
-          # Set CODE_SIGN_IDENTITY
-          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "iPhone Developer";/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGN_IDENTITY = ".*";/CODE_SIGN_IDENTITY = "iPhone Developer";/g' ios/Runner.xcodeproj/project.pbxproj
-          
-          # Code signing configuration completed
-          
-          echo "Code signing configuration completed"
-          echo "Verifying changes:"
-          grep -i "CODE_SIGN_STYLE\|DEVELOPMENT_TEAM\|PROVISIONING_PROFILE_SPECIFIER\|CODE_SIGN_IDENTITY" ios/Runner.xcodeproj/project.pbxproj || echo "No code signing settings found in project file"
-      - name: Build IPA using Xcode
-        script: |
-          # Build IPA using Xcode with Codemagic's built-in code signing
-          echo "Building IPA with Xcode..."
-          echo "Using provisioning profile: $CM_PROVISIONING_PROFILE"
-          echo "Using team ID: $CM_TEAM_ID"
-          
-          # Build IPA using Xcode directly
-          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME" --export-options-plist "ios/exportOptions-adhoc.plist"
-      - name: Verify IPA creation
+          echo "Building Development IPA…"
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+      - name: Verify IPA
         script: |
           echo "=== Checking for IPA files ==="
-          find build/ios -name "*.ipa" -type f
+          find build/ios -name "*.ipa" -type f || true
           ls -la build/ios/ipa/ || echo "IPA directory not found"
-          echo "=== Build directory contents ==="
-          ls -la build/ios/
     artifacts:
       - build/ios/ipa/*.ipa
       - flutter_drive.log
 
-  ios-test-build:
-    name: iOS Test Build (No Code Signing)
+  ios-adhoc:
+    name: iOS Device Build (Ad Hoc)
     environment:
       vars:
         XCODE_PROJECT: "ios/Runner.xcodeproj"
         XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "com.example.zapItMobile"
-        FLUTTER_VERSION: "stable"
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-    scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Flutter build for iOS (no IPA)
-        script: |
-          flutter build ios --debug \
-            --target=lib/main_debug.dart \
-            --no-codesign
-      - name: Verify build artifacts
-        script: |
-          echo "=== Checking for build artifacts ==="
-          ls -la build/ios/
-          echo "=== Archive directory contents ==="
-          ls -la build/ios/archive/ || echo "Archive directory not found"
-    artifacts:
-      - build/ios/archive/**/*.app
-      - flutter_drive.log
-
-  ios-device-build:
-    name: iOS Device Build (Code Signed)
-    environment:
-      vars:
-        XCODE_PROJECT: "ios/Runner.xcodeproj"
-        XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "com.example.zapItMobile"
-        FLUTTER_VERSION: "stable"
-        # iOS Code Signing - Configure these in Codemagic Team Settings
-        CM_CERTIFICATE: "Zap It"
-        CM_CERTIFICATE_PASSWORD: "2a7rhj0U"
-        CM_PROVISIONING_PROFILE: "Zap it Development"
-        CM_TEAM_ID: "K83636P9VT"
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-    scripts:
-      - name: Set up iOS code signing
-        script: |
-          # Set up code signing environment
-          echo "Setting up iOS code signing..."
-          echo "Team ID: $CM_TEAM_ID"
-          echo "Certificate: $CM_CERTIFICATE"
-          echo "Provisioning Profile: $CM_PROVISIONING_PROFILE"
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Flutter build ipa for device
-        script: |
-          flutter build ipa --release \
-            --target=lib/main_debug.dart
-    artifacts:
-      - build/ios/ipa/*.ipa
-      - flutter_drive.log
-
-  ios-workflow:
-    name: iOS Simulator Build
-    environment:
-      vars:
-        XCODE_PROJECT: "ios/Runner.xcodeproj"
-        XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "com.example.zapItMobile"
-        FLUTTER_VERSION: "stable"
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-    scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Flutter build for iOS simulator
-        script: |
-          flutter build ios --debug \
-            --target=lib/main_debug.dart \
-            --simulator
-      - name: Create simulator build archive
-        script: |
-          cd ios
-          xcodebuild -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 14,OS=17.5' \
-            -derivedDataPath build \
-            build
-    artifacts:
-      - ios/build/**/*.app
-      - flutter_drive.log
-
-  android-workflow:
-    name: Android Build
-    environment:
-      vars:
-        PACKAGE_NAME: "com.example.zap_it_mobile"
-        FLUTTER_VERSION: "stable"
-      flutter: stable
-      android_signing:
-        - keystore_reference
-    scripts:
-      - name: Set up code signing settings
-        script: |
-          echo $CM_KEYSTORE_PATH | base64 --decode > /tmp/keystore.keystore
-          cd android
-          echo "storeFile=/tmp/keystore.keystore" >> key.properties
-          echo "storePassword=$CM_KEYSTORE_PASSWORD" >> key.properties
-          echo "keyAlias=$CM_KEY_ALIAS" >> key.properties
-          echo "keyPassword=$CM_KEY_PASSWORD" >> key.properties
-      - name: Verify Google Services
-        script: |
-          echo "=== Verifying google-services.json files ==="
-          ls -la android/app/google-services.json
-          ls -la android/app/src/main/google-services.json
-          ls -la android/app/src/debug/google-services.json
-          ls -la android/app/src/release/google-services.json
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Flutter build apk
-        script: flutter build apk --release --target=lib/main_prod.dart
-      - name: Flutter build appbundle
-        script: flutter build appbundle --release --target=lib/main_prod.dart
-    artifacts:
-      - build/**/outputs/**/*.apk
-      - build/**/outputs/**/mapping.txt
-      - /tmp/bitrise_upload_dir/*.aab
-      - flutter_drive.log
-    # publishing:
-    #   google_play:
-    #     track: internal
-    #     submit_as_draft: true
-    #     credentials: $GOOGLE_PLAY_CREDENTIALS
-
-  web-workflow:
-    name: Web Build
-    environment:
-      vars:
-        FLUTTER_VERSION: "stable"
-      flutter: stable
-    scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Flutter build web
-        script: flutter build web --release --target=lib/main_prod.dart
-    artifacts:
-      - build/web/**
-      - flutter_drive.log 
-
-
-
-
-
-
-
-
+        BUNDLE_ID: "com.
