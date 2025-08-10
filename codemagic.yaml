@@ -53,7 +53,16 @@ workflows:
           echo "Provisioning Profile: $CM_PROVISIONING_PROFILE"
       - name: Set up code signing settings
         script: |
+          # Set up code signing using Codemagic's built-in commands
+          echo "Setting up code signing with certificates..."
+          echo "Available environment variables:"
+          echo "CM_CERTIFICATE: $CM_CERTIFICATE"
+          echo "CM_PROVISIONING_PROFILE: $CM_PROVISIONING_PROFILE"
+          echo "CM_TEAM_ID: $CM_TEAM_ID"
           xcode-project use-profiles
+          echo "Code signing setup completed"
+          echo "Checking if certificates are available..."
+          security find-identity -v -p codesigning || echo "No certificates found"
       - name: Flutter build ipa for development
         script: |
           flutter build ipa --debug \
