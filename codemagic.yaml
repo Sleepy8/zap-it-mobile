@@ -19,40 +19,24 @@ workflows:
         script: flutter pub get
       - name: Install CocoaPods
         script: pod install --project-directory=ios
-      - name: Debug code signing setup
+      - name: Build with Flutter (automatic signing)
         script: |
-          echo "=== Debugging code signing ==="
-          echo "Available certificates:"
-          security find-identity -v -p codesigning
-          echo ""
-          echo "Available provisioning profiles:"
-          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/
-          echo ""
-          echo "Checking project settings:"
-          xcodebuild -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" -showBuildSettings | grep -E "(CODE_SIGN|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE)"
-      - name: Apply Development profiles
-        script: |
-          echo "Applying Development profiles"
-          xcode-project use-profiles --archive-method=development --code-signing-setup-verbose-logging
-      - name: Try Flutter build first
-        script: |
-          echo "Trying Flutter build approach (Debug for Development)"
-          flutter build ipa --debug --verbose || echo "Flutter build failed, continuing with Xcode"
-      - name: Build IPA Development
-        script: |
-          echo "Building Development IPA with Xcode"
-          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME" --verbose
+          echo "Building IPA with Flutter automatic signing"
+          flutter build ipa \
+            --release \
+            --verbose \
+            --export-method=development
       - name: Verify IPA
         script: |
           echo "Checking for IPA files"
-          find build/ios -name "*.ipa" -type f || true
+          find build -name "*.ipa" -type f || echo "No IPA files found"
           ls -la build/ios/ipa/ || echo "IPA directory not found"
     artifacts:
       - build/ios/ipa/*.ipa
       - flutter_drive.log
 
-  ios-release:
-    name: iOS Release Build  
+  ios-development-manual:
+    name: iOS Development Build Manual
     environment:
       vars:
         XCODE_PROJECT: "ios/Runner.xcodeproj"
@@ -71,18 +55,102 @@ workflows:
         script: flutter pub get
       - name: Install CocoaPods
         script: pod install --project-directory=ios
-      - name: Apply Development profiles
+      - name: Build IPA with manual signing
         script: |
-          echo "Applying Development profiles"
-          xcode-project use-profiles --archive-method=development --code-signing-setup-verbose-logging
-      - name: Try Flutter build first
+          echo "Building Development IPA with manual signing"
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME" \
+            --code-signing-identity="Apple Development: Created via API (AA9JMX96Q5)" \
+            --provisioning-profile-specifier="Zap it Development"
+      - name: Verify IPA
         script: |
-          echo "Trying Flutter build approach (Release)"
-          flutter build ipa --release --verbose || echo "Flutter build failed, continuing with Xcode"
-      - name: Build IPA Release
-        script: |
-          echo "Building Release IPA with Xcode"
-          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME" --verbose
+          echo "Checking for IPA files"
+          find build -name "*.ipa" -type f || echo "No IPA files found"
+          ls -la build/ios/ipa/ || echo "IPA directory not found"
     artifacts:
       - build/ios/ipa/*.ipa
+      - flutter_drive.log
+
+  ios-development-fallback:
+    name: iOS Development Build Fallback
+    environment:
+      vars:
+        XCODE_PROJECT: "ios/Runner.xcodeproj"
+        XCODE_SCHEME: "Runner"
+        BUNDLE_ID: "com.example.zapItMobile"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        certificates:
+          - Zap It
+        provisioning_profiles:
+          - Zap it Development
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Install CocoaPods
+        script: pod install --project-directory=ios
+      - name: Debug and build
+        script: |
+          echo "=== Final debug check ==="
+          security find-identity -v -p codesigning
+          
+          echo "Building with xcodebuild directly..."
+          xcodebuild \
+            -project ios/Runner.xcodeproj \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath build/ios/Runner.xcarchive \
+            -destination 'generic/platform=iOS' \
+            archive \
+            DEVELOPMENT_TEAM=K83636P9VT \
+            CODE_SIGN_IDENTITY="Apple Development: Created via API (AA9JMX96Q5)" \
+            PROVISIONING_PROFILE_SPECIFIER="Zap it Development" \
+            CODE_SIGN_STYLE=Manual
+            
+          echo "Creating IPA from archive..."
+          xcodebuild \
+            -archivePath build/ios/Runner.xcarchive \
+            -exportArchive \
+            -exportPath build/ios/ipa \
+            -exportOptionsPlist ios/ExportOptions.plist || \
+          xcodebuild \
+            -archivePath build/ios/Runner.xcarchive \
+            -exportArchive \
+            -exportPath build/ios/ipa \
+            -exportMethod development
+      - name: Create ExportOptions if needed
+        script: |
+          if [ ! -f ios/ExportOptions.plist ]; then
+            cat > ios/ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>teamID</key>
+            <string>K83636P9VT</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.example.zapItMobile</key>
+              <string>Zap it Development</string>
+            </dict>
+            <key>signingStyle</key>
+            <string>manual</string>
+          </dict>
+          </plist>
+          EOF
+            echo "Created ExportOptions.plist"
+          fi
+      - name: Verify IPA
+        script: |
+          echo "Checking for IPA files"
+          find build -name "*.ipa" -type f || echo "No IPA files found"
+          ls -la build/ios/ipa/ || echo "IPA directory not found"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/ios/Runner.xcarchive/**/*
       - flutter_drive.log
