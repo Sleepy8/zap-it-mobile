@@ -70,6 +70,8 @@ workflows:
           echo "Current working directory: $(pwd)"
           echo "Checking if project file exists:"
           ls -la ios/Runner.xcodeproj/project.pbxproj
+          
+          # Force code signing configuration
           echo "Setting CODE_SIGN_STYLE=Manual"
           plutil -replace CODE_SIGN_STYLE -string "Manual" ios/Runner.xcodeproj/project.pbxproj
           echo "Setting DEVELOPMENT_TEAM=$CM_TEAM_ID"
@@ -78,6 +80,14 @@ workflows:
           plutil -replace PROVISIONING_PROFILE_SPECIFIER -string "$CM_PROVISIONING_PROFILE" ios/Runner.xcodeproj/project.pbxproj
           echo "Setting CODE_SIGN_IDENTITY=iPhone Developer"
           plutil -replace CODE_SIGN_IDENTITY -string "iPhone Developer" ios/Runner.xcodeproj/project.pbxproj
+          
+          # Also set for all configurations
+          echo "Setting code signing for all configurations..."
+          plutil -replace "buildSettings.CODE_SIGN_STYLE" -string "Manual" ios/Runner.xcodeproj/project.pbxproj
+          plutil -replace "buildSettings.DEVELOPMENT_TEAM" -string "$CM_TEAM_ID" ios/Runner.xcodeproj/project.pbxproj
+          plutil -replace "buildSettings.PROVISIONING_PROFILE_SPECIFIER" -string "$CM_PROVISIONING_PROFILE" ios/Runner.xcodeproj/project.pbxproj
+          plutil -replace "buildSettings.CODE_SIGN_IDENTITY" -string "iPhone Developer" ios/Runner.xcodeproj/project.pbxproj
+          
           echo "Code signing configuration completed"
           echo "Verifying changes:"
           grep -i "CODE_SIGN_STYLE\|DEVELOPMENT_TEAM\|PROVISIONING_PROFILE_SPECIFIER\|CODE_SIGN_IDENTITY" ios/Runner.xcodeproj/project.pbxproj || echo "No code signing settings found in project file"
