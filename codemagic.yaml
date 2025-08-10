@@ -36,8 +36,8 @@ workflows:
           xcode-project use-profiles --archive-method=development --code-signing-setup-verbose-logging
       - name: Try Flutter build first
         script: |
-          echo "Trying Flutter build approach"
-          flutter build ipa --release --target=lib/main_debug.dart --verbose || echo "Flutter build failed, continuing with Xcode"
+          echo "Trying Flutter build approach (Debug for Development)"
+          flutter build ipa --debug --verbose || echo "Flutter build failed, continuing with Xcode"
       - name: Build IPA Development
         script: |
           echo "Building Development IPA with Xcode"
@@ -51,8 +51,8 @@ workflows:
       - build/ios/ipa/*.ipa
       - flutter_drive.log
 
-  ios-development-automatic:
-    name: iOS Development Build Automatic Signing
+  ios-release:
+    name: iOS Release Build  
     environment:
       vars:
         XCODE_PROJECT: "ios/Runner.xcodeproj"
@@ -71,16 +71,18 @@ workflows:
         script: flutter pub get
       - name: Install CocoaPods
         script: pod install --project-directory=ios
-      - name: Set automatic signing
+      - name: Apply Development profiles
         script: |
-          echo "Setting up automatic code signing"
-          # Force automatic signing in project
-          /usr/libexec/PlistBuddy -c "Set :objects:13B07F861A680F5B00A75B9A:buildSettings:CODE_SIGN_STYLE Automatic" ios/Runner.xcodeproj/project.pbxproj || true
-          /usr/libexec/PlistBuddy -c "Set :objects:13B07F941A680F5B00A75B9A:buildSettings:CODE_SIGN_STYLE Automatic" ios/Runner.xcodeproj/project.pbxproj || true
-      - name: Build with Flutter
+          echo "Applying Development profiles"
+          xcode-project use-profiles --archive-method=development --code-signing-setup-verbose-logging
+      - name: Try Flutter build first
         script: |
-          echo "Building with Flutter automatic signing"
-          flutter build ipa --release --target=lib/main_debug.dart --verbose
+          echo "Trying Flutter build approach (Release)"
+          flutter build ipa --release --verbose || echo "Flutter build failed, continuing with Xcode"
+      - name: Build IPA Release
+        script: |
+          echo "Building Release IPA with Xcode"
+          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME" --verbose
     artifacts:
       - build/ios/ipa/*.ipa
       - flutter_drive.log
