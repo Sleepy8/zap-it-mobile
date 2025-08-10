@@ -29,7 +29,7 @@ workflows:
     name: iOS Development Build
     environment:
       vars:
-        XCODE_PROJECT: "ios/Runner.xcworkspace"
+        XCODE_PROJECT: "ios/Runner.xcodeproj"
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "stable"
@@ -83,7 +83,7 @@ workflows:
     name: iOS Test Build (No Code Signing)
     environment:
       vars:
-        XCODE_PROJECT: "ios/Runner.xcworkspace"
+        XCODE_PROJECT: "ios/Runner.xcodeproj"
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "stable"
@@ -112,7 +112,7 @@ workflows:
     name: iOS Device Build (Code Signed)
     environment:
       vars:
-        XCODE_PROJECT: "ios/Runner.xcworkspace"
+        XCODE_PROJECT: "ios/Runner.xcodeproj"
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "stable"
@@ -146,7 +146,7 @@ workflows:
     name: iOS Simulator Build
     environment:
       vars:
-        XCODE_PROJECT: "ios/Runner.xcworkspace"
+        XCODE_PROJECT: "ios/Runner.xcodeproj"
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "stable"
