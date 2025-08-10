@@ -11,9 +11,9 @@ workflows:
       cocoapods: default
       ios_signing:
         certificates:
-          - dev_cert_reference
+          - Zap It
         provisioning_profiles:
-          - dev_profile_reference
+          - Zap it Development
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
@@ -48,9 +48,9 @@ workflows:
       cocoapods: default
       ios_signing:
         certificates:
-          - dist_cert_reference
+          - Zap It
         provisioning_profiles:
-          - adhoc_profile_reference
+          - Zap it Development
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
@@ -71,28 +71,6 @@ workflows:
           ls -la build/ios/ipa/ || echo "IPA directory not found"
     artifacts:
       - build/ios/ipa/*.ipa
-      - flutter_drive.log
-
-  ios-simulator:
-    name: iOS Simulator Build
-    environment:
-      vars:
-        XCODE_SCHEME: "Runner"
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-    scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Flutter build for iOS simulator
-        script: flutter build ios --debug --simulator --target=lib/main_debug.dart
-      - name: Build with Xcode for simulator
-        script: |
-          cd ios
-          pod install
-          xcodebuild -workspace Runner.xcworkspace -scheme "$XCODE_SCHEME" -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 14,OS=17.5' -derivedDataPath build build
-    artifacts:
-      - ios/build/**/*.app
       - flutter_drive.log
 
   android-workflow:
