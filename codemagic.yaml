@@ -64,7 +64,7 @@ workflows:
           EOF
       - name: Build Flutter IPA
         script: |
-          flutter build ipa --release --verbose --export-method=development --export-options-plist=ios/ExportOptions.plist
+          flutter build ipa --release --verbose --export-options-plist=ios/ExportOptions.plist
       - name: Verify IPA
         script: |
           find build -name "*.ipa" -type f || echo "No IPA files found"
@@ -94,6 +94,30 @@ workflows:
         script: pod install --project-directory=ios
       - name: Build with xcode-project CLI
         script: xcode-project build-ipa --project ios/Runner.xcodeproj --scheme Runner --code-signing-style manual
+    artifacts:
+      - build/ios/ipa/*.ipa
+
+  ios-development-basic:
+    name: iOS Development Basic
+    environment:
+      vars:
+        BUNDLE_ID: "com.example.zapItMobile"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        certificates:
+          - Zap It
+        provisioning_profiles:
+          - Zap it Development
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Install CocoaPods
+        script: pod install --project-directory=ios
+      - name: Build Flutter IPA with export method only
+        script: |
+          flutter build ipa --release --verbose --export-method=development
     artifacts:
       - build/ios/ipa/*.ipa
 
