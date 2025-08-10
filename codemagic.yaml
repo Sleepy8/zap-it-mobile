@@ -21,17 +21,15 @@ workflows:
         script: pod install --project-directory=ios
       - name: Apply Development profiles
         script: |
-          echo "Applying Development profiles…"
+          echo "Applying Development profiles"
           xcode-project use-profiles --archive-method=development --code-signing-setup-verbose-logging
-      - name: Build IPA (Development)
+      - name: Build IPA Development
         script: |
-          echo "Building Development IPA…"
-          xcode-project build-ipa \
-            --project "$XCODE_PROJECT" \
-            --scheme "$XCODE_SCHEME"
+          echo "Building Development IPA"
+          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME"
       - name: Verify IPA
         script: |
-          echo "=== Checking for IPA files ==="
+          echo "Checking for IPA files"
           find build/ios -name "*.ipa" -type f || true
           ls -la build/ios/ipa/ || echo "IPA directory not found"
     artifacts:
@@ -39,9 +37,104 @@ workflows:
       - flutter_drive.log
 
   ios-adhoc:
-    name: iOS Device Build (Ad Hoc)
+    name: iOS Device Build Ad Hoc
     environment:
       vars:
         XCODE_PROJECT: "ios/Runner.xcodeproj"
         XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "com.
+        BUNDLE_ID: "com.example.zapItMobile"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        certificates:
+          - dist_cert_reference
+        provisioning_profiles:
+          - adhoc_profile_reference
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Install CocoaPods
+        script: pod install --project-directory=ios
+      - name: Apply Ad Hoc profiles
+        script: |
+          echo "Applying Ad Hoc profiles"
+          xcode-project use-profiles --archive-method=ad-hoc --code-signing-setup-verbose-logging
+      - name: Build IPA Ad Hoc
+        script: |
+          echo "Building Ad Hoc IPA"
+          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME"
+      - name: Verify IPA
+        script: |
+          echo "Checking for IPA files"
+          find build/ios -name "*.ipa" -type f || true
+          ls -la build/ios/ipa/ || echo "IPA directory not found"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - flutter_drive.log
+
+  ios-simulator:
+    name: iOS Simulator Build
+    environment:
+      vars:
+        XCODE_SCHEME: "Runner"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Flutter build for iOS simulator
+        script: flutter build ios --debug --simulator --target=lib/main_debug.dart
+      - name: Build with Xcode for simulator
+        script: |
+          cd ios
+          pod install
+          xcodebuild -workspace Runner.xcworkspace -scheme "$XCODE_SCHEME" -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 14,OS=17.5' -derivedDataPath build build
+    artifacts:
+      - ios/build/**/*.app
+      - flutter_drive.log
+
+  android-workflow:
+    name: Android Build
+    environment:
+      vars:
+        FLUTTER_VERSION: "stable"
+      flutter: stable
+      android_signing:
+        - keystore_reference
+    scripts:
+      - name: Configure keystore
+        script: |
+          echo $CM_KEYSTORE_PATH | base64 --decode > /tmp/keystore.keystore
+          cd android
+          echo "storeFile=/tmp/keystore.keystore" >> key.properties
+          echo "storePassword=$CM_KEYSTORE_PASSWORD" >> key.properties
+          echo "keyAlias=$CM_KEY_ALIAS" >> key.properties
+          echo "keyPassword=$CM_KEY_PASSWORD" >> key.properties
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build APK
+        script: flutter build apk --release --target=lib/main_prod.dart
+      - name: Build App Bundle
+        script: flutter build appbundle --release --target=lib/main_prod.dart
+    artifacts:
+      - build/**/outputs/**/*.apk
+      - build/**/outputs/**/mapping.txt
+      - /tmp/bitrise_upload_dir/*.aab
+      - flutter_drive.log
+
+  web-workflow:
+    name: Web Build
+    environment:
+      vars:
+        FLUTTER_VERSION: "stable"
+      flutter: stable
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Flutter build web
+        script: flutter build web --release --target=lib/main_prod.dart
+    artifacts:
+      - build/web/**
+      - flutter_drive.log
