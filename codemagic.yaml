@@ -26,7 +26,7 @@
 
 workflows:
   ios-development:
-    name: iOS Development Build (No Code Signing)
+    name: iOS Development Build
     environment:
       vars:
         XCODE_PROJECT: "ios/Runner.xcworkspace"
@@ -34,17 +34,28 @@ workflows:
         BUNDLE_ID: "com.zapit.mobile"
         FLUTTER_VERSION: "stable"
         CM_TEAM_ID: "K83636P9VT"
+        # iOS Code Signing - Configure these in Codemagic Team Settings
+        CM_CERTIFICATE: "Quikit"
+        CM_CERTIFICATE_PASSWORD: "Quikit2024!"
+        CM_PROVISIONING_PROFILE: "Quikit Development"
       flutter: stable
       xcode: latest
       cocoapods: default
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
-      - name: Flutter build ipa for development (no code signing)
+      - name: Set up iOS code signing for development
+        script: |
+          # Set up code signing environment for development
+          echo "Setting up iOS code signing for development..."
+          echo "Team ID: $CM_TEAM_ID"
+          echo "Certificate: $CM_CERTIFICATE"
+          echo "Provisioning Profile: $CM_PROVISIONING_PROFILE"
+      - name: Flutter build ipa for development
         script: |
           flutter build ipa --debug \
             --target=lib/main_debug.dart \
-            --no-codesign
+            --export-options-plist=ios/exportOptions-adhoc.plist
       - name: Verify IPA creation
         script: |
           echo "=== Checking for IPA files ==="
@@ -56,6 +67,35 @@ workflows:
       - build/ios/ipa/*.ipa
       - flutter_drive.log
 
+  ios-test-build:
+    name: iOS Test Build (No Code Signing)
+    environment:
+      vars:
+        XCODE_PROJECT: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+        BUNDLE_ID: "com.zapit.mobile"
+        FLUTTER_VERSION: "stable"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Flutter build for iOS (no IPA)
+        script: |
+          flutter build ios --debug \
+            --target=lib/main_debug.dart \
+            --no-codesign
+      - name: Verify build artifacts
+        script: |
+          echo "=== Checking for build artifacts ==="
+          ls -la build/ios/
+          echo "=== Archive directory contents ==="
+          ls -la build/ios/archive/ || echo "Archive directory not found"
+    artifacts:
+      - build/ios/archive/**/*.app
+      - flutter_drive.log
+
   ios-device-build:
     name: iOS Device Build (Code Signed)
     environment:
@@ -65,10 +105,10 @@ workflows:
         BUNDLE_ID: "com.zapit.mobile"
         FLUTTER_VERSION: "stable"
         # iOS Code Signing - Configure these in Codemagic Team Settings
-        CM_CERTIFICATE: "YOUR_CERTIFICATE"
-        CM_CERTIFICATE_PASSWORD: "YOUR_PASSWORD"
-        CM_PROVISIONING_PROFILE: "YOUR_PROVISIONING_PROFILE"
-        CM_TEAM_ID: "YOUR_TEAM_ID"
+        CM_CERTIFICATE: "Quikit"
+        CM_CERTIFICATE_PASSWORD: "Quikit2024!"
+        CM_PROVISIONING_PROFILE: "Quikit Development"
+        CM_TEAM_ID: "K83636P9VT"
       flutter: stable
       xcode: latest
       cocoapods: default
