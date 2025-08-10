@@ -54,13 +54,6 @@ workflows:
       - name: Set up code signing settings
         script: |
           xcode-project use-profiles
-          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME" --export-options-plist "ios/exportOptions-adhoc.plist"
-        script: |
-          # Set up code signing environment for development
-          echo "Setting up iOS code signing for development..."
-          echo "Team ID: $CM_TEAM_ID"
-          echo "Certificate: $CM_CERTIFICATE"
-          echo "Provisioning Profile: $CM_PROVISIONING_PROFILE"
       - name: Flutter build ipa for development
         script: |
           flutter build ipa --debug \
@@ -228,6 +221,7 @@ workflows:
     artifacts:
       - build/web/**
       - flutter_drive.log 
+
 
 
 
