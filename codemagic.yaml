@@ -24,97 +24,20 @@ workflows:
           CERT_NAME=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
           echo "Team ID: $TEAM_ID"
           echo "Certificate: $CERT_NAME"
+          echo "Profile: Zap it Development"
           echo "export DEVELOPMENT_TEAM=\"$TEAM_ID\"" >> $CM_ENV
           echo "export CODE_SIGN_IDENTITY=\"$CERT_NAME\"" >> $CM_ENV
-          echo "export PROFILE_NAME=\"Zap it Development\"" >> $CM_ENV
-      - name: Force manual signing in Xcode project
+      - name: Build Flutter for iOS (no codesign)
+        script: |
+          echo "Building Flutter iOS..."
+          flutter build ios --release --no-codesign
+      - name: Archive with xcodebuild (workspace)
         script: |
           cd ios
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' "s/DEVELOPMENT_TEAM = \"\"/DEVELOPMENT_TEAM = \"$DEVELOPMENT_TEAM\"/g" Runner.xcodeproj/project.pbxproj
-          sed -i '' "s/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = \"$DEVELOPMENT_TEAM\";/g" Runner.xcodeproj/project.pbxproj
-          if ! grep -q "PROVISIONING_PROFILE_SPECIFIER" Runner.xcodeproj/project.pbxproj; then
-            sed -i '' "/PRODUCT_BUNDLE_IDENTIFIER.*=/a\\\
-          				PROVISIONING_PROFILE_SPECIFIER = \"$PROFILE_NAME\";" Runner.xcodeproj/project.pbxproj
-          else
-            sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = [^;]*;/PROVISIONING_PROFILE_SPECIFIER = \"$PROFILE_NAME\";/g" Runner.xcodeproj/project.pbxproj
-          fi
-          echo "✅ Xcode project configured for manual signing"
-      - name: Create ExportOptions plist
-        script: |
-          cat > ios/ExportOptions.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>development</string>
-            <key>teamID</key>
-            <string>$DEVELOPMENT_TEAM</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>$BUNDLE_ID</key>
-              <string>$PROFILE_NAME</string>
-            </dict>
-            <key>signingStyle</key>
-            <string>manual</string>
-          </dict>
-          </plist>
-          EOF
-          echo "✅ ExportOptions.plist created"
-      - name: Build Flutter IPA with manual signing
-        script: |
-          echo "Building IPA with Flutter and manual signing..."
-          flutter build ipa --release --verbose --export-options-plist=ios/ExportOptions.plist
-      - name: Verify build
-        script: |
-          echo "=== Verification ==="
-          if [ -f build/ios/ipa/*.ipa ]; then
-            echo "✅ IPA created successfully"
-            IPA_FILE=$(find build/ios/ipa -name "*.ipa" | head -1)
-            echo "IPA file: $IPA_FILE"
-            echo "IPA size: $(ls -lh "$IPA_FILE" | awk '{print $5}')"
-          else
-            echo "❌ IPA not found"
-            echo "Contents of build/ios/:"
-            ls -la build/ios/ || echo "Directory not found"
-            echo "Contents of build/ios/ipa/:"
-            ls -la build/ios/ipa/ || echo "Directory not found"
-            exit 1
-          fi
-    artifacts:
-      - build/ios/ipa/*.ipa
-      - ios/ExportOptions.plist
-
-  ios-development-workspace:
-    name: iOS Development Build (Workspace)
-    environment:
-      vars:
-        BUNDLE_ID: "com.example.zapItMobile"
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-      ios_signing:
-        certificates:
-          - Zap It
-        provisioning_profiles:
-          - Zap it Development
-    scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Install CocoaPods
-        script: pod install --project-directory=ios
-      - name: Extract signing info
-        script: |
-          PROFILE_PATH=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision" | head -1)
-          TEAM_ID=$(security cms -D -i "$PROFILE_PATH" | plutil -extract TeamIdentifier.0 raw -)
-          CERT_NAME=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
-          echo "export DEVELOPMENT_TEAM=\"$TEAM_ID\"" >> $CM_ENV
-          echo "export CODE_SIGN_IDENTITY=\"$CERT_NAME\"" >> $CM_ENV
-      - name: Build and archive using workspace
-        script: |
-          cd ios
+          echo "Cleaning previous builds..."
           xcodebuild clean -workspace Runner.xcworkspace -scheme Runner -configuration Release
+          
+          echo "Creating archive..."
           xcodebuild archive \
             -workspace Runner.xcworkspace \
             -scheme Runner \
@@ -128,6 +51,7 @@ workflows:
       - name: Export IPA
         script: |
           cd ios
+          echo "Creating ExportOptions.plist..."
           cat > ExportOptions.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -147,11 +71,63 @@ workflows:
           </dict>
           </plist>
           EOF
+          
+          echo "Exporting IPA..."
           mkdir -p ../build/ios/ipa
           xcodebuild -exportArchive \
             -archivePath ../build/ios/Runner.xcarchive \
             -exportPath ../build/ios/ipa \
             -exportOptionsPlist ExportOptions.plist
+      - name: Verify build
+        script: |
+          echo "=== Build Verification ==="
+          if [ -d "build/ios/Runner.xcarchive" ]; then
+            echo "✅ Archive created successfully"
+          else
+            echo "❌ Archive not found"
+          fi
+          
+          if [ -f build/ios/ipa/*.ipa ]; then
+            echo "✅ IPA created successfully"
+            IPA_FILE=$(find build/ios/ipa -name "*.ipa" | head -1)
+            echo "IPA file: $IPA_FILE"
+            echo "IPA size: $(ls -lh "$IPA_FILE" | awk '{print $5}')"
+          else
+            echo "❌ IPA not found"
+            echo "Archive contents:"
+            ls -la build/ios/Runner.xcarchive/ || echo "Archive directory not found"
+            echo "IPA directory contents:"
+            ls -la build/ios/ipa/ || echo "IPA directory not found"
+            exit 1
+          fi
     artifacts:
       - build/ios/ipa/*.ipa
       - build/ios/Runner.xcarchive/**/*
+      - ios/ExportOptions.plist
+
+  ios-development-simple:
+    name: iOS Development Simple
+    environment:
+      vars:
+        BUNDLE_ID: "com.example.zapItMobile"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        certificates:
+          - Zap It
+        provisioning_profiles:
+          - Zap it Development
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Install CocoaPods
+        script: pod install --project-directory=ios
+      - name: Build Flutter iOS
+        script: flutter build ios --release --no-codesign
+      - name: Use profiles and build IPA
+        script: |
+          xcode-project use-profiles --archive-method=development
+          xcode-project build-ipa --project ios/Runner.xcodeproj --scheme Runner
+    artifacts:
+      - build/ios/ipa/*.ipa
