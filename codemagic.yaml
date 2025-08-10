@@ -98,23 +98,15 @@ workflows:
           echo "Code signing configuration completed"
           echo "Verifying changes:"
           grep -i "CODE_SIGN_STYLE\|DEVELOPMENT_TEAM\|PROVISIONING_PROFILE_SPECIFIER\|CODE_SIGN_IDENTITY" ios/Runner.xcodeproj/project.pbxproj || echo "No code signing settings found in project file"
-      - name: Build IPA using Flutter
+      - name: Build IPA using Xcode
         script: |
-          # Build IPA using Flutter with manual code signing
-          echo "Building IPA with Flutter..."
+          # Build IPA using Xcode with Codemagic's built-in code signing
+          echo "Building IPA with Xcode..."
           echo "Using provisioning profile: $CM_PROVISIONING_PROFILE"
           echo "Using team ID: $CM_TEAM_ID"
           
-          # Set environment variables for code signing
-          export PROVISIONING_PROFILE_SPECIFIER="$CM_PROVISIONING_PROFILE"
-          export DEVELOPMENT_TEAM="$CM_TEAM_ID"
-          export CODE_SIGN_IDENTITY="iPhone Developer"
-          
-          # Build IPA with Flutter
-          flutter build ipa --debug \
-            --target=lib/main_debug.dart \
-            --export-options-plist=ios/exportOptions-adhoc.plist \
-            --build-number=1
+          # Build IPA using Xcode directly
+          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME" --export-options-plist "ios/exportOptions-adhoc.plist"
       - name: Verify IPA creation
         script: |
           echo "=== Checking for IPA files ==="
