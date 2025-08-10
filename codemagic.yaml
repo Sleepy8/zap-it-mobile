@@ -63,11 +63,11 @@ workflows:
           echo "Code signing setup completed"
           echo "Checking if certificates are available..."
           security find-identity -v -p codesigning || echo "No certificates found"
-      - name: Flutter build ipa for development
+      - name: Build IPA using Xcode
         script: |
-          flutter build ipa --debug \
-            --target=lib/main_debug.dart \
-            --export-options-plist=ios/exportOptions-adhoc.plist
+          # Build IPA using Xcode directly with code signing
+          echo "Building IPA with Xcode..."
+          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME" --export-options-plist "ios/exportOptions-adhoc.plist"
       - name: Verify IPA creation
         script: |
           echo "=== Checking for IPA files ==="
