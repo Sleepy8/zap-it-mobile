@@ -37,7 +37,7 @@ workflows:
         # iOS Code Signing - Configure these in Codemagic Team Settings
         CM_CERTIFICATE: "Quikit"
         CM_CERTIFICATE_PASSWORD: "Quikit2024!"
-        CM_PROVISIONING_PROFILE: "Quikit Development"
+        CM_PROVISIONING_PROFILE: "Zap it Development"
       flutter: stable
       xcode: latest
       cocoapods: default
@@ -117,7 +117,7 @@ workflows:
         # iOS Code Signing - Configure these in Codemagic Team Settings
         CM_CERTIFICATE: "Quikit"
         CM_CERTIFICATE_PASSWORD: "Quikit2024!"
-        CM_PROVISIONING_PROFILE: "Quikit Development"
+        CM_PROVISIONING_PROFILE: "Zap it Development"
         CM_TEAM_ID: "K83636P9VT"
       flutter: stable
       xcode: latest
@@ -228,6 +228,7 @@ workflows:
     artifacts:
       - build/web/**
       - flutter_drive.log 
+
 
 
 
