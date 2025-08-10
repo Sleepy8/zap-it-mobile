@@ -93,13 +93,7 @@ workflows:
           sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "iPhone Developer";/g' ios/Runner.xcodeproj/project.pbxproj
           sed -i '' 's/CODE_SIGN_IDENTITY = ".*";/CODE_SIGN_IDENTITY = "iPhone Developer";/g' ios/Runner.xcodeproj/project.pbxproj
           
-          # Add missing settings if they don't exist
-          echo "Adding missing code signing settings..."
-          sed -i '' '/buildSettings = {/a\
-				CODE_SIGN_STYLE = Manual;\
-				DEVELOPMENT_TEAM = '$CM_TEAM_ID';\
-				PROVISIONING_PROFILE_SPECIFIER = "'$CM_PROVISIONING_PROFILE'";\
-				CODE_SIGN_IDENTITY = "iPhone Developer";' ios/Runner.xcodeproj/project.pbxproj
+          # Code signing configuration completed
           
           echo "Code signing configuration completed"
           echo "Verifying changes:"
