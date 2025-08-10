@@ -50,6 +50,11 @@ workflows:
             PROVISIONING_PROFILE_SPECIFIER="Zap it Development"
       - name: Export IPA
         script: |
+          # Re-extract team ID in case environment variable didn't persist
+          PROFILE_PATH=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision" | head -1)
+          TEAM_ID=$(security cms -D -i "$PROFILE_PATH" | plutil -extract TeamIdentifier.0 raw -)
+          echo "Using Team ID for export: $TEAM_ID"
+          
           cd ios
           echo "Creating ExportOptions.plist..."
           cat > ExportOptions.plist << EOF
@@ -60,7 +65,7 @@ workflows:
             <key>method</key>
             <string>development</string>
             <key>teamID</key>
-            <string>$DEVELOPMENT_TEAM</string>
+            <string>$TEAM_ID</string>
             <key>provisioningProfiles</key>
             <dict>
               <key>$BUNDLE_ID</key>
@@ -94,8 +99,8 @@ workflows:
             echo "IPA size: $(ls -lh "$IPA_FILE" | awk '{print $5}')"
           else
             echo "❌ IPA not found"
-            echo "Archive contents:"
-            ls -la build/ios/Runner.xcarchive/ || echo "Archive directory not found"
+            echo "Export logs:"
+            ls -la /var/folders/*/T/Runner_*.xcdistributionlogs 2>/dev/null || echo "No export logs found"
             echo "IPA directory contents:"
             ls -la build/ios/ipa/ || echo "IPA directory not found"
             exit 1
@@ -105,8 +110,8 @@ workflows:
       - build/ios/Runner.xcarchive/**/*
       - ios/ExportOptions.plist
 
-  ios-development-simple:
-    name: iOS Development Simple
+  ios-development-alternative:
+    name: iOS Development Alternative
     environment:
       vars:
         BUNDLE_ID: "com.example.zapItMobile"
@@ -127,6 +132,7 @@ workflows:
         script: flutter build ios --release --no-codesign
       - name: Use profiles and build IPA
         script: |
+          echo "Using xcode-project commands..."
           xcode-project use-profiles --archive-method=development
           xcode-project build-ipa --project ios/Runner.xcodeproj --scheme Runner
     artifacts:
