@@ -4,6 +4,7 @@ workflows:
     environment:
       vars:
         BUNDLE_ID: "com.example.zapItMobile"
+        FLUTTER_VERSION: "3.24.5"
       flutter: stable
       xcode: latest
       cocoapods: default
@@ -13,15 +14,32 @@ workflows:
         provisioning_profiles:
           - Zap it Development
     scripts:
+      - name: Set up Flutter version
+        script: |
+          flutter --version
+          echo "Using Flutter version: $FLUTTER_VERSION"
       - name: Get Flutter packages
-        script: flutter pub get
+        script: |
+          flutter pub get
+          flutter pub deps
       - name: Install CocoaPods
-        script: pod install --project-directory=ios
+        script: |
+          cd ios
+          pod install --repo-update
+          cd ..
       - name: Extract signing info
         script: |
           PROFILE_PATH=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision" | head -1)
+          if [ -z "$PROFILE_PATH" ]; then
+            echo "❌ No provisioning profile found"
+            exit 1
+          fi
           TEAM_ID=$(security cms -D -i "$PROFILE_PATH" | plutil -extract TeamIdentifier.0 raw -)
           CERT_NAME=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
+          if [ -z "$TEAM_ID" ] || [ -z "$CERT_NAME" ]; then
+            echo "❌ Failed to extract signing information"
+            exit 1
+          fi
           echo "Team ID: $TEAM_ID"
           echo "Certificate: $CERT_NAME"
           echo "Profile: Zap it Development"
@@ -30,7 +48,8 @@ workflows:
       - name: Build Flutter for iOS (no codesign)
         script: |
           echo "Building Flutter iOS..."
-          flutter build ios --release --no-codesign
+          flutter clean
+          flutter build ios --release --no-codesign --verbose
       - name: Archive with xcodebuild (workspace)
         script: |
           cd ios
@@ -47,7 +66,8 @@ workflows:
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
             CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
-            PROVISIONING_PROFILE_SPECIFIER="Zap it Development"
+            PROVISIONING_PROFILE_SPECIFIER="Zap it Development" \
+            -allowProvisioningUpdates
       - name: Export IPA
         script: |
           # Re-extract team ID in case environment variable didn't persist
@@ -73,6 +93,10 @@ workflows:
             </dict>
             <key>signingStyle</key>
             <string>manual</string>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <false/>
           </dict>
           </plist>
           EOF
@@ -82,14 +106,17 @@ workflows:
           xcodebuild -exportArchive \
             -archivePath ../build/ios/Runner.xcarchive \
             -exportPath ../build/ios/ipa \
-            -exportOptionsPlist ExportOptions.plist
+            -exportOptionsPlist ExportOptions.plist \
+            -allowProvisioningUpdates
       - name: Verify build
         script: |
           echo "=== Build Verification ==="
           if [ -d "build/ios/Runner.xcarchive" ]; then
             echo "✅ Archive created successfully"
+            echo "Archive size: $(du -sh build/ios/Runner.xcarchive | cut -f1)"
           else
             echo "❌ Archive not found"
+            exit 1
           fi
           
           if [ -f build/ios/ipa/*.ipa ]; then
@@ -97,6 +124,10 @@ workflows:
             IPA_FILE=$(find build/ios/ipa -name "*.ipa" | head -1)
             echo "IPA file: $IPA_FILE"
             echo "IPA size: $(ls -lh "$IPA_FILE" | awk '{print $5}')"
+            
+            # Verify IPA contents
+            echo "Verifying IPA contents..."
+            unzip -l "$IPA_FILE" | head -10
           else
             echo "❌ IPA not found"
             echo "Export logs:"
@@ -109,3 +140,8 @@ workflows:
       - build/ios/ipa/*.ipa
       - build/ios/Runner.xcarchive/**/*
       - ios/ExportOptions.plist
+      - build/ios/archive.xcresult
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
