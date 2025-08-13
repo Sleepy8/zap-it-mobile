@@ -90,7 +90,7 @@ export const deleteUserAccount = onDocumentDeleted(
   }
 );
 
-// Notifica messaggi chat
+// Notifica messaggi chat - FIXED FOR iOS
 export const sendMessageNotification = onDocumentCreated(
   "conversations/{conversationId}/messages/{messageId}",
   async (event) => {
@@ -190,7 +190,12 @@ export const sendMessageNotification = onDocumentCreated(
                 body: messageText,
               },
               "content-available": 1,
+              "mutable-content": 1,
             },
+          },
+          headers: {
+            "apns-priority": "10",
+            "apns-push-type": "alert",
           },
         },
         token: fcmToken,
@@ -207,7 +212,7 @@ export const sendMessageNotification = onDocumentCreated(
   }
 );
 
-// Notifica ZAP (silenziosa)
+// Notifica ZAP (silenziosa) - FIXED FOR iOS
 export const sendZapNotification = onDocumentCreated(
   "zaps/{zapId}",
   async (event) => {
@@ -300,13 +305,18 @@ export const sendZapNotification = onDocumentCreated(
             aps: {
               sound: "silence.aiff",
               badge: 1,
-              // NOTIFICA INVISIBILE SU iOS
+              // NOTIFICA INVISIBILE SU iOS - FIXED FOR iOS
               alert: {
                 title: "",
                 body: "",
               },
               "content-available": 1,
+              "mutable-content": 1,
             },
+          },
+          headers: {
+            "apns-priority": "10",
+            "apns-push-type": "background",
           },
         },
         token: fcmToken,
@@ -333,7 +343,7 @@ export const sendZapNotification = onDocumentCreated(
   }
 );
 
-// Notifica richiesta amicizia
+// Notifica richiesta amicizia - FIXED FOR iOS
 export const sendFriendRequestNotification = onDocumentCreated(
   "friendships/{friendshipId}",
   async (event) => {
@@ -405,7 +415,13 @@ export const sendFriendRequestNotification = onDocumentCreated(
                 title: 'Zap It - Nuova richiesta amicizia ⚡',
                 body: `@${senderUsername} vuole essere tuo amico`,
               },
+              "content-available": 1,
+              "mutable-content": 1,
             },
+          },
+          headers: {
+            "apns-priority": "10",
+            "apns-push-type": "alert",
           },
         },
         token: fcmToken,
@@ -464,9 +480,9 @@ export const cleanupOldZaps = onSchedule({ schedule: "every 24 hours" }, async (
   }
 });
 
-// Cleanup old messages (TTL and auto-destruction)
+// Cleanup old messages (TTL and auto-destruction) - SIMPLIFIED
 export const cleanupOldMessages = onSchedule(
-  { schedule: "every 1 minutes" },
+  { schedule: "every 1 hours" },
   async (event) => {
     try {
       console.log('🧹 Starting message cleanup...');
@@ -479,8 +495,6 @@ export const cleanupOldMessages = onSchedule(
       
       for (const conversationDoc of conversationsSnapshot.docs) {
         const conversationId = conversationDoc.id;
-        const conversationData = conversationDoc.data();
-        const participants = conversationData.participants || [];
         
         // Get all messages in this conversation
         const messagesSnapshot = await db
@@ -491,26 +505,11 @@ export const cleanupOldMessages = onSchedule(
         
         for (const messageDoc of messagesSnapshot.docs) {
           const messageData = messageDoc.data();
-          const autoDestroyedBy = messageData.autoDestroyedBy || {};
           const hardDeleteAt = messageData.hardDeleteAt;
           const isAutoDestroyed = messageData.isAutoDestroyed || false;
           
           let shouldDelete = false;
           let deleteReason = '';
-          
-          // Check if all participants have auto-destroyed
-          let allParticipantsDestroyed = true;
-          for (const participantId of participants) {
-            if (!autoDestroyedBy[participantId]) {
-              allParticipantsDestroyed = false;
-              break;
-            }
-          }
-          
-          if (allParticipantsDestroyed && participants.length > 0) {
-            shouldDelete = true;
-            deleteReason = 'All participants auto-destroyed';
-          }
           
           // Check TTL (15 days)
           if (hardDeleteAt && hardDeleteAt.toDate() < now) {
@@ -547,7 +546,7 @@ export const cleanupOldMessages = onSchedule(
   }
 );
 
-// Eliminazione automatica messaggi - SOLO QUANDO TUTTI HANNO VISUALIZZATO E USCITO
+// Eliminazione automatica messaggi - RIPRISTINATA PER CANCELLARE SOLO I MESSAGGI
 export const autoDeleteMessages = onDocumentUpdated(
   "conversations/{conversationId}",
   async (event) => {
@@ -656,7 +655,7 @@ export const autoDeleteMessages = onDocumentUpdated(
             batch.delete(doc.ref);
           });
           
-          // Reset conversation data
+          // Reset conversation data but KEEP the conversation document
           batch.update(
             db.collection('conversations').doc(conversationId),
             {
@@ -668,11 +667,12 @@ export const autoDeleteMessages = onDocumentUpdated(
               purgeAt: {},
               isInChat: {},
               lastSeenInChatAt: {},
+              // DO NOT delete the conversation document - only clear the messages
             }
           );
           
           await batch.commit();
-          console.log(`✅ Deleted ALL ${messagesSnapshot.docs.length} messages from conversation: ${conversationId}`);
+          console.log(`✅ Deleted ALL ${messagesSnapshot.docs.length} messages from conversation: ${conversationId} (conversation kept)`);
           
         } catch (error) {
           console.error(`❌ Error in delayed deletion check:`, error);

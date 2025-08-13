@@ -530,7 +530,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     // Impedisci gap troppo piccoli che si attaccano al segmento precedente
     _currentGaps.add(gapMs < _minTapGapMs ? _minTapGapMs : gapMs.clamp(0, 10000));
     
-    // Gestione specifica per piattaforma - AUMENTATA DRASTICAMENTE L'INTENSITÀ
+    // Gestione specifica per piattaforma - FIXED FOR iOS
     if (PlatformService.isAndroid) {
       // Android: avvia un keep-alive della vibrazione finché il dito resta giù
       if (_hasAmplitudeControl) {
@@ -550,10 +550,10 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
         }
       });
     } else if (PlatformService.isIOS) {
-      // iOS: haptic feedback
+      // iOS: haptic feedback con timing migliorato e meno frequente
       _triggerHapticFeedback(intensity);
       _vibrationTimer?.cancel();
-      _vibrationTimer = Timer.periodic(const Duration(milliseconds: 70), (_) {
+      _vibrationTimer = Timer.periodic(const Duration(milliseconds: 150), (_) {
         if (_isVibrating) {
           _triggerHapticFeedback(_lastIntensity);
         }
@@ -588,7 +588,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
       }
     }
     
-    // Gestione specifica per piattaforma - AUMENTATA DRASTICAMENTE L'INTENSITÀ
+    // Gestione specifica per piattaforma - FIXED FOR iOS
     if (PlatformService.isAndroid) {
       // Android: aggiorna vibrazione in tempo reale con intensità molto più alta
       // Usa una durata più lunga per vibrazioni continue durante il trascinamento
@@ -599,26 +599,21 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
         Vibration.vibrate(duration: _liveChunkMs);
       }
     } else if (PlatformService.isIOS) {
-      // iOS: aggiorna haptic feedback
-      _triggerHapticFeedback(intensity);
+      // iOS: aggiorna haptic feedback con timing più lento
+      // Non aggiornare troppo frequentemente per evitare vibrazioni troppo veloci
+      if (_vibrationTimer == null || !_vibrationTimer!.isActive) {
+        _triggerHapticFeedback(intensity);
+      }
     }
   }
 
   void _triggerHapticFeedback(int intensity) {
     if (PlatformService.isIOS) {
-      // Converti intensità in tipo di haptic feedback - AUMENTATA LA SENSIBILITÀ
+      // Converti intensità in tipo di haptic feedback - FIXED FOR iOS
       if (intensity > 180) {
         HapticFeedback.heavyImpact();
-        // Aggiungi un secondo feedback per intensità molto alte
-        Future.delayed(Duration(milliseconds: 10), () {
-          HapticFeedback.heavyImpact();
-        });
       } else if (intensity > 120) {
         HapticFeedback.mediumImpact();
-        // Aggiungi un secondo feedback per intensità medie
-        Future.delayed(Duration(milliseconds: 10), () {
-          HapticFeedback.mediumImpact();
-        });
       } else if (intensity > 60) {
         HapticFeedback.lightImpact();
       } else {
@@ -930,18 +925,12 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
           }
         }
       } else if (PlatformService.isIOS) {
-        // iOS: usa haptic feedback per ogni impulso - AUMENTATA MASSIVAMENTE LA RIPRODUZIONE
+        // iOS: usa haptic feedback per ogni impulso - FIXED FOR iOS
         for (int i = 0; i < patternToPlay.length; i++) {
           final intensity = i < intensitiesToPlay.length ? intensitiesToPlay[i] : 128;
           
-          // Ripeti il feedback per intensità più alte - AUMENTATO DRASTICAMENTE IL RIPETERE
-          final repeatCount = intensity > 180 ? 5 : (intensity > 120 ? 3 : (intensity > 60 ? 2 : 1));
-          for (int j = 0; j < repeatCount; j++) {
-            _triggerHapticFeedback(intensity);
-            if (j < repeatCount - 1) {
-              await Future.delayed(Duration(milliseconds: 2)); // Pausa molto breve tra ripetizioni
-            }
-          }
+          // Trigger haptic feedback una sola volta per impulso
+          _triggerHapticFeedback(intensity);
           
           // Attendi la durata dell'impulso
           await Future.delayed(Duration(milliseconds: patternToPlay[i].round()));

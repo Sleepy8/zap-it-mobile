@@ -223,12 +223,21 @@ class MessagesService {
           .get();
 
       if (!conversationDoc.exists) {
-        // This is a new conversation - conversationId is actually the otherUserId
-        realConversationId = await _createNewConversation(conversationId);
+        // This might be a new conversation - check if conversationId is actually the otherUserId
+        // First, try to find existing conversation between these users
+        realConversationId = await getConversationId(conversationId);
+        
         if (realConversationId == null) {
-          return {'success': false, 'conversationId': null};
+          // No existing conversation found, create a new one
+          realConversationId = await _createNewConversation(conversationId);
+          if (realConversationId == null) {
+            return {'success': false, 'conversationId': null};
+          }
+          otherUserId = conversationId; // The original conversationId was the other user ID
+        } else {
+          // Found existing conversation
+          otherUserId = conversationId; // The original conversationId was the other user ID
         }
-        otherUserId = conversationId; // The original conversationId was the other user ID
       } else {
         // This is an existing conversation
         conversationData = conversationDoc.data() as Map<String, dynamic>;
@@ -725,12 +734,13 @@ class MessagesService {
     }
   }
 
-  // Get conversation between two users
+  // Get conversation between two users - IMPROVED FOR iOS
   Future<String?> getConversationId(String otherUserId) async {
     try {
       final currentUserId = FirebaseAuth.instance.currentUser?.uid;
       if (currentUserId == null) return null;
 
+      // Use a more efficient query to find existing conversation
       final query = await _firestore
           .collection('conversations')
           .where('participants', arrayContains: currentUserId)
@@ -739,8 +749,14 @@ class MessagesService {
       for (var doc in query.docs) {
         final data = doc.data();
         final participants = List<String>.from(data['participants']);
+        
+        // Check if the other user is in this conversation
         if (participants.contains(otherUserId)) {
-          return doc.id;
+          // Check if conversation is not deleted for current user
+          final isDeleted = data['isDeleted']?[currentUserId] ?? false;
+          if (!isDeleted) {
+            return doc.id;
+          }
         }
       }
 

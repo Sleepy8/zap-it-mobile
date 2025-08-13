@@ -46,19 +46,25 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	
-	<!-- Permessi per notifiche push -->
+	<!-- Permessi per notifiche push - FIXED FOR iOS -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
 		<string>background-processing</string>
+		<string>background-fetch</string>
+		<string>audio</string>
 	</array>
 	
-	<!-- Permessi per haptic feedback -->
+	<!-- Permessi per haptic feedback - FIXED FOR iOS -->
 	<key>NSHapticFeedbackUsageDescription</key>
 	<string>L'app usa l'haptic feedback per le vibrazioni ZAP</string>
 	
-	<!-- Permessi per notifiche -->
+	<!-- Permessi per notifiche - FIXED FOR iOS -->
 	<key>NSUserNotificationUsageDescription</key>
 	<string>L'app invia notifiche per gli ZAP ricevuti</string>
+	
+	<!-- Permessi per notifiche push - FIXED FOR iOS -->
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
 </dict>
 </plist>
