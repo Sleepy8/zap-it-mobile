@@ -24,14 +24,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     
     final messageType = message.data['type'];
     
-    // Handle ZAP notifications - SILENT PUSH ONLY
+    // Handle ZAP notifications - SHOW SIMPLE NOTIFICATION FOR iOS
     if (messageType == 'new_zap') {
-      // For iOS: Silent push cannot trigger haptics in background
-      // We can only sync data, not trigger vibrations
-      await _handleZapSync(message);
-      
+      // For iOS: Show simple notification since haptics don't work in background
       // For Android: Can trigger vibration in background
-      if (Platform.isAndroid) {
+      if (Platform.isIOS) {
+        await _showZapNotification();
+      } else if (Platform.isAndroid) {
         await Future.delayed(Duration(milliseconds: 1000));
         await Vibration.vibrate(duration: 200);
       }
@@ -57,26 +56,47 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
-// Handle ZAP sync (silent) - iOS background only
-Future<void> _handleZapSync(RemoteMessage message) async {
+// Show simple ZAP notification (iOS)
+Future<void> _showZapNotification() async {
   try {
-    // Check if ZAPs are paused
-    final zapsPaused = await NotificationService()._isZapsPaused();
-    if (zapsPaused) {
-      return;
-    }
-    
-    // For iOS: We can only sync data in background
-    // Haptics will be triggered when app comes to foreground
-    // Store ZAP data for later processing
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('pending_zap_${DateTime.now().millisecondsSinceEpoch}', 
-        message.data.toString());
-    
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'zap_channel',
+      'ZAP Notifications',
+      channelDescription: 'Notifications for ZAPs received',
+      importance: Importance.high,
+      priority: Priority.high,
+      showWhen: true,
+      enableVibration: true,
+      playSound: true,
+    );
+
+    const DarwinNotificationDetails iOSPlatformChannelSpecifics =
+        DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      sound: 'default',
+      badgeNumber: 1,
+    );
+
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+      iOS: iOSPlatformChannelSpecifics,
+    );
+
+    await flutterLocalNotificationsPlugin.show(
+      1001, // Unique ID for ZAP notifications
+      'Hai ricevuto un nuovo ZAP!',
+      'Tocca per vedere chi ti ha inviato un ZAP',
+      platformChannelSpecifics,
+    );
   } catch (e) {
     // Silent error handling
   }
 }
+
+
 
 // Initialize local notifications
 Future<void> _initializeLocalNotifications() async {

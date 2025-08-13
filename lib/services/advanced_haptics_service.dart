@@ -56,8 +56,8 @@ class AdvancedHapticsService {
       if (Platform.isIOS) {
         // iOS 18: Only trigger haptics if app is in foreground
         if (!_isAppInForeground) {
-          // Store for later playback when app comes to foreground
-          await _storePendingHaptic(intensity);
+          // For iOS: Haptics don't work in background, so we skip them
+          // The notification will provide feedback instead
           return;
         }
         
@@ -78,52 +78,6 @@ class AdvancedHapticsService {
       } catch (_) {
         // Silent fallback
       }
-    }
-  }
-
-  // Store pending haptic for iOS background
-  Future<void> _storePendingHaptic(double intensity) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final pendingHaptics = prefs.getStringList('pending_haptics') ?? [];
-      pendingHaptics.add(intensity.toString());
-      
-      // Keep only last 10 haptics to avoid memory issues
-      if (pendingHaptics.length > 10) {
-        pendingHaptics.removeRange(0, pendingHaptics.length - 10);
-      }
-      
-      await prefs.setStringList('pending_haptics', pendingHaptics);
-    } catch (e) {
-      // Silent error handling
-    }
-  }
-
-  // Play pending haptics when app comes to foreground
-  Future<void> playPendingHaptics() async {
-    if (!Platform.isIOS) return;
-    
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final pendingHaptics = prefs.getStringList('pending_haptics') ?? [];
-      
-      if (pendingHaptics.isNotEmpty) {
-        // Play all pending haptics with small delays
-        for (int i = 0; i < pendingHaptics.length; i++) {
-          final intensity = double.tryParse(pendingHaptics[i]) ?? 0.5;
-          await _emitIosHaptic(intensity);
-          
-          // Small delay between haptics
-          if (i < pendingHaptics.length - 1) {
-            await Future.delayed(Duration(milliseconds: 100));
-          }
-        }
-        
-        // Clear pending haptics
-        await prefs.remove('pending_haptics');
-      }
-    } catch (e) {
-      // Silent error handling
     }
   }
 

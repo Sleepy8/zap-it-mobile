@@ -121,8 +121,6 @@ class _ZapItAppState extends State<ZapItApp> with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         // App is in foreground
         hapticsService.setAppForegroundState(true);
-        // Play any pending haptics from background
-        hapticsService.playPendingHaptics();
         break;
       case AppLifecycleState.inactive:
       case AppLifecycleState.paused:
