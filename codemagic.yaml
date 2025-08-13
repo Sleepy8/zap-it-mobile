@@ -22,6 +22,10 @@ workflows:
         script: |
           flutter pub get
           flutter pub deps
+      - name: Generate app icons
+        script: |
+          echo "Generating app icons with flutter_launcher_icons..."
+          flutter pub run flutter_launcher_icons:main
       - name: Install CocoaPods
         script: |
           cd ios
@@ -141,6 +145,64 @@ workflows:
       - build/ios/Runner.xcarchive/**/*
       - ios/ExportOptions.plist
       - build/ios/archive.xcresult
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
+
+  android-development:
+    name: Android Development Build
+    environment:
+      vars:
+        PACKAGE_NAME: "com.example.zap_it_mobile"
+        FLUTTER_VERSION: "3.24.5"
+      flutter: stable
+      android_signing:
+        - keystore_reference
+        - google_play
+    scripts:
+      - name: Set up Flutter version
+        script: |
+          flutter --version
+          echo "Using Flutter version: $FLUTTER_VERSION"
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+          flutter pub deps
+      - name: Generate app icons
+        script: |
+          echo "Generating app icons with flutter_launcher_icons..."
+          flutter pub run flutter_launcher_icons:main
+      - name: Build APK
+        script: |
+          echo "Building Android APK..."
+          flutter clean
+          flutter build apk --release
+      - name: Build App Bundle
+        script: |
+          echo "Building Android App Bundle..."
+          flutter build appbundle --release
+      - name: Verify build
+        script: |
+          echo "=== Build Verification ==="
+          if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            echo "✅ APK created successfully"
+            echo "APK size: $(ls -lh build/app/outputs/flutter-apk/app-release.apk | awk '{print $5}')"
+          else
+            echo "❌ APK not found"
+            exit 1
+          fi
+          
+          if [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
+            echo "✅ App Bundle created successfully"
+            echo "AAB size: $(ls -lh build/app/outputs/bundle/release/app-release.aab | awk '{print $5}')"
+          else
+            echo "❌ App Bundle not found"
+            exit 1
+          fi
+    artifacts:
+      - build/app/outputs/flutter-apk/app-release.apk
+      - build/app/outputs/bundle/release/app-release.aab
     publishing:
       email:
         recipients:
