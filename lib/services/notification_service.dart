@@ -41,10 +41,14 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       }
     }
     
-    // Handle message notifications - NO LOCAL NOTIFICATION, ONLY VIBRATION
+    // Handle message notifications - CREATE LOCAL NOTIFICATION
     if (message.data['type'] == 'new_message') {
-      // DO NOT create local notification - Firebase notification is sufficient
-      // Only trigger vibration for feedback
+      // Create local notification for messages
+      final senderName = message.data['senderName'] ?? 'Un amico';
+      final conversationId = message.data['conversationId'] ?? '';
+      await _showMessageNotification(senderName, conversationId);
+      
+      // Also trigger vibration for feedback
       try {
         if (Platform.isAndroid) {
           await Vibration.vibrate(duration: 200);
@@ -56,10 +60,14 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       }
     }
     
-    // Handle friend request notifications - NO LOCAL NOTIFICATION, ONLY VIBRATION
+    // Handle friend request notifications - CREATE LOCAL NOTIFICATION
     if (message.data['type'] == 'friend_request') {
-      // DO NOT create local notification - Firebase notification is sufficient
-      // Only trigger vibration for feedback
+      // Create local notification for friend requests
+      final senderName = message.data['senderName'] ?? 'Un amico';
+      final senderUsername = message.data['senderUsername'] ?? 'amico';
+      await _showFriendRequestNotification(senderName, senderUsername);
+      
+      // Also trigger vibration for feedback
       try {
         if (Platform.isAndroid) {
           await Vibration.vibrate(duration: 200);

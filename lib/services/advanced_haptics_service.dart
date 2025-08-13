@@ -142,7 +142,7 @@ class AdvancedHapticsService {
     } catch (e) {
       // Fallback a haptic standard
       try {
-        await HapticFeedback.mediumImpact();
+        HapticFeedback.mediumImpact();
       } catch (_) {
         // Fallback finale
         if (_hasVibrator) {
