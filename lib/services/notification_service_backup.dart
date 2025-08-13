@@ -32,12 +32,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         await Future.delayed(Duration(milliseconds: 1000));
         await Vibration.vibrate(duration: 200);
       } else if (Platform.isIOS) {
-              // Haptic feedback for iOS - FIXED FOR iOS
-      Future.delayed(Duration(milliseconds: 1000));
-      HapticFeedback.heavyImpact();
-      // Add a second haptic for emphasis
-      Future.delayed(Duration(milliseconds: 200));
-      HapticFeedback.mediumImpact();
+        // Haptic feedback for iOS - FIXED FOR iOS
+        await Future.delayed(Duration(milliseconds: 1000));
+        await HapticFeedback.heavyImpact();
+        // Add a second haptic for emphasis
+        await Future.delayed(Duration(milliseconds: 200));
+        await HapticFeedback.mediumImpact();
       }
     }
     
@@ -49,7 +49,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         if (Platform.isAndroid) {
           await Vibration.vibrate(duration: 200);
         } else if (Platform.isIOS) {
-          HapticFeedback.lightImpact();
+          await HapticFeedback.lightImpact();
         }
       } catch (e) {
         // Silent error handling
@@ -64,7 +64,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         if (Platform.isAndroid) {
           await Vibration.vibrate(duration: 200);
         } else if (Platform.isIOS) {
-          HapticFeedback.lightImpact();
+          await HapticFeedback.lightImpact();
         }
       } catch (e) {
         // Silent error handling
@@ -245,9 +245,9 @@ Future<void> _triggerZapVibration() async {
       }
     } else if (Platform.isIOS) {
       // iOS: haptic feedback semplice e diretto
-      HapticFeedback.heavyImpact();
+      await HapticFeedback.heavyImpact();
       // Aggiungi un secondo feedback dopo un breve delay
-      Future.delayed(Duration(milliseconds: 150), () {
+      await Future.delayed(Duration(milliseconds: 150), () {
         HapticFeedback.mediumImpact();
       });
     } else {
@@ -273,15 +273,15 @@ Future<void> _triggerHapticFeedback() async {
   try {
     if (Platform.isIOS) {
       // Trigger haptic feedback with proper timing for iOS
-      HapticFeedback.heavyImpact();
+      await HapticFeedback.heavyImpact();
       
       // Wait and trigger again for emphasis
-      Future.delayed(Duration(milliseconds: 200));
-      HapticFeedback.mediumImpact();
+      await Future.delayed(Duration(milliseconds: 200));
+      await HapticFeedback.mediumImpact();
       
       // Add a third haptic for ZAP effect
-      Future.delayed(Duration(milliseconds: 150));
-      HapticFeedback.lightImpact();
+      await Future.delayed(Duration(milliseconds: 150));
+      await HapticFeedback.lightImpact();
     } else if (Platform.isAndroid) {
       // Android fallback
       await Vibration.vibrate(duration: 200);

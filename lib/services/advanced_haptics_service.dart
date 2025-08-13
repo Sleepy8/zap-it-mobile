@@ -109,24 +109,24 @@ class AdvancedHapticsService {
 
         switch (bucket) {
           case 0:
-            await HapticFeedback.selectionClick();
+            HapticFeedback.selectionClick();
             break;
           case 1:
-            await HapticFeedback.lightImpact();
+            HapticFeedback.lightImpact();
             break;
           case 2:
           case 3:
-            await HapticFeedback.mediumImpact();
+            HapticFeedback.mediumImpact();
             break;
           case 4:
-            await HapticFeedback.heavyImpact();
+            HapticFeedback.heavyImpact();
             break;
         }
       }
     } catch (e) {
       // Fallback silenzioso
       try {
-        await HapticFeedback.selectionClick();
+        HapticFeedback.selectionClick();
       } catch (_) {}
     }
   }
@@ -165,13 +165,13 @@ class AdvancedHapticsService {
   // Haptic Android standard (effetti predefiniti)
   Future<void> _emitAndroidStandardHaptic(double intensity) async {
     if (intensity >= 0.8) {
-      await HapticFeedback.heavyImpact();
+      HapticFeedback.heavyImpact();
     } else if (intensity >= 0.5) {
-      await HapticFeedback.mediumImpact();
+      HapticFeedback.mediumImpact();
     } else if (intensity >= 0.2) {
-      await HapticFeedback.lightImpact();
+      HapticFeedback.lightImpact();
     } else {
-      await HapticFeedback.selectionClick();
+      HapticFeedback.selectionClick();
     }
   }
 
@@ -181,7 +181,7 @@ class AdvancedHapticsService {
     if (!_isHapticFeedbackSupported) return;
 
     try {
-      await HapticFeedback.selectionClick();
+      HapticFeedback.selectionClick();
     } catch (e) {
       // Ignora errori
     }
@@ -194,12 +194,12 @@ class AdvancedHapticsService {
 
     try {
       if (Platform.isIOS) {
-        await HapticFeedback.mediumImpact();
+        HapticFeedback.mediumImpact();
       } else {
         if (_hasVibrator) {
           await Vibration.vibrate(pattern: [0, 100, 50, 100]);
         } else {
-          await HapticFeedback.lightImpact();
+          HapticFeedback.lightImpact();
         }
       }
     } catch (e) {
@@ -214,12 +214,12 @@ class AdvancedHapticsService {
 
     try {
       if (Platform.isIOS) {
-        await HapticFeedback.heavyImpact();
+        HapticFeedback.heavyImpact();
       } else {
         if (_hasVibrator) {
           await Vibration.vibrate(pattern: [0, 200, 100, 200]);
         } else {
-          await HapticFeedback.heavyImpact();
+          HapticFeedback.heavyImpact();
         }
       }
     } catch (e) {
@@ -233,7 +233,7 @@ class AdvancedHapticsService {
     if (!_isHapticFeedbackSupported) return;
 
     try {
-      await HapticFeedback.lightImpact();
+      HapticFeedback.lightImpact();
     } catch (e) {
       // Ignora errori
     }
@@ -247,7 +247,7 @@ class AdvancedHapticsService {
     // Riproduce pattern con timing
     for (int i = 0; i < pattern.length; i++) {
       await playIntensityHaptic(pattern[i]);
-      await Future.delayed(const Duration(milliseconds: 100));
+      Future.delayed(const Duration(milliseconds: 100));
     }
   }
 
