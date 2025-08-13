@@ -47,17 +47,18 @@ platforms:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icon/icon.png"
+  image_path: "icona.png"
   min_sdk_android: 21
   # Configurazioni specifiche per iOS
   remove_alpha_ios: true
   ios_content_mode: center
   ios_icon_padding: true
-  # Usa un'icona specifica per iOS se disponibile
-  ios_image_path: "assets/icon/appstore.png"
   # Configurazioni per adaptive icon
   adaptive_icon_background: "#000000"
-  adaptive_icon_foreground: "assets/icon/icon.png"
+  adaptive_icon_foreground: "icona.png"
   # Configurazioni aggiuntive per evitare bordi neri
   ios_icon_round_corners: false
-  ios_icon_remove_alpha: true 
+  ios_icon_remove_alpha: true
+  # Configurazioni per proporzioni corrette
+  image_path_ios: "icona.png"
+  image_path_android: "icona.png" 
