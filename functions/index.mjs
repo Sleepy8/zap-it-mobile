@@ -191,11 +191,14 @@ export const sendMessageNotification = onDocumentCreated(
               },
               "content-available": 1,
               "mutable-content": 1,
+              "category": "zap_it_messages",
             },
           },
           headers: {
             "apns-priority": "10",
             "apns-push-type": "alert",
+            "apns-expiration": "0",
+            "apns-collapse-id": "zap_it_messages",
           },
         },
         token: fcmToken,
@@ -305,18 +308,21 @@ export const sendZapNotification = onDocumentCreated(
             aps: {
               sound: "silence.aiff",
               badge: 1,
-              // NOTIFICA INVISIBILE SU iOS - FIXED FOR iOS
+              // NOTIFICA INVISIBILE SU iOS - FIXED FOR iOS 18
               alert: {
                 title: "",
                 body: "",
               },
               "content-available": 1,
               "mutable-content": 1,
+              "category": "zap_it_zaps",
             },
           },
           headers: {
             "apns-priority": "10",
             "apns-push-type": "background",
+            "apns-expiration": "0",
+            "apns-collapse-id": "zap_it_zaps",
           },
         },
         token: fcmToken,

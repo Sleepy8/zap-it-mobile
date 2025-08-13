@@ -244,8 +244,12 @@ Future<void> _triggerZapVibration() async {
         );
       }
     } else if (Platform.isIOS) {
-      // iOS: haptic feedback - FIXED FOR iOS
-      await _triggerHapticFeedback();
+      // iOS: haptic feedback semplice e diretto
+      await HapticFeedback.heavyImpact();
+      // Aggiungi un secondo feedback dopo un breve delay
+      await Future.delayed(Duration(milliseconds: 150), () {
+        HapticFeedback.mediumImpact();
+      });
     } else {
       // Fallback per dispositivi senza vibrazione
       await _triggerHapticFeedback();
@@ -450,16 +454,18 @@ class NotificationService {
       // Initialize local notifications
       await _initializeLocalNotifications();
       
-      // Request permissions with better error handling
+      // Request permissions with better error handling for iOS 18
       try {
         NotificationSettings settings = await _firebaseMessaging.requestPermission(
           alert: true,
           badge: true,
           sound: true,
           provisional: false,
+          criticalAlert: false, // iOS 18 specific
+          announcement: false, // iOS 18 specific
         );
         
-
+        console.log('📱 Notification permission status:', settings.authorizationStatus);
         
         // If permission denied, try to request again
         if (settings.authorizationStatus == AuthorizationStatus.denied) {
@@ -470,19 +476,21 @@ class NotificationService {
             badge: true,
             sound: true,
             provisional: true, // Try provisional permission
+            criticalAlert: false,
+            announcement: false,
           );
         }
       } catch (e) {
-        // Silent error handling
+        console.log('❌ Error requesting notification permissions:', e);
       }
       
       // Get FCM token
       String? token;
       try {
         token = await _firebaseMessaging.getToken();
-
+        console.log('📱 FCM Token obtained:', token?.substring(0, 20) + '...');
       } catch (e) {
-        // Silent error handling
+        console.log('❌ Error getting FCM token:', e);
       }
       
       // Save token locally first (always)
@@ -497,15 +505,16 @@ class NotificationService {
               'fcmToken': token,
               'lastTokenUpdate': FieldValue.serverTimestamp(),
             });
-
+            console.log('✅ FCM token saved to Firestore');
           }
         } catch (e) {
-          // Silent error handling
+          console.log('❌ Error saving FCM token:', e);
         }
       }
       
       // Handle foreground messages
       FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+        console.log('📨 Foreground message received:', message.data['type']);
         
         if (message.data['type'] == 'new_zap') {
           await _handleZapNotification(message);
@@ -530,6 +539,7 @@ class NotificationService {
       
       // Handle app opened from notification
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        console.log('📱 App opened from notification:', message.data['type']);
         _handleNotificationTap(message);
       });
       
@@ -537,14 +547,15 @@ class NotificationService {
       try {
         RemoteMessage? initialMessage = await _firebaseMessaging.getInitialMessage();
         if (initialMessage != null) {
+          console.log('📱 Initial message found:', initialMessage.data['type']);
           _handleNotificationTap(initialMessage);
         }
       } catch (e) {
-        // Silent error handling
+        console.log('❌ Error getting initial message:', e);
       }
       
     } catch (e) {
-      // Silent error handling
+      console.log('❌ Error initializing push notifications:', e);
     }
   }
 
