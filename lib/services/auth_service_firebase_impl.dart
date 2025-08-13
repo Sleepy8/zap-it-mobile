@@ -114,20 +114,32 @@ class FirebaseAuthImpl {
     String password,
   ) async {
     try {
+      // Check if username already exists (case-insensitive) BEFORE creating Firebase account
+      final usernameQuery = await _firestore
+          .collection('users')
+          .get();
+
+      // Check case-insensitive manually
+      bool usernameExists = false;
+      for (var doc in usernameQuery.docs) {
+        final data = doc.data();
+        final existingUsername = data['username'] as String?;
+        if (existingUsername != null) {
+          if (existingUsername.toLowerCase().trim() == username.toLowerCase().trim()) {
+            usernameExists = true;
+            break;
+          }
+        }
+      }
+      
+      if (usernameExists) {
+        throw 'Username già in uso';
+      }
+
       UserCredential result = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-
-      // Check if username already exists
-      final usernameQuery = await _firestore
-          .collection('users')
-          .where('username', isEqualTo: username)
-          .get();
-
-      if (usernameQuery.docs.isNotEmpty) {
-        throw 'Username già in uso';
-      }
 
       // Create user document in Firestore
       await _firestore.collection('users').doc(result.user!.uid).set({
@@ -169,6 +181,50 @@ class FirebaseAuthImpl {
     } catch (e) {
       
       throw e;
+    }
+  }
+
+  // Check if username exists (case-insensitive)
+  Future<bool> checkUsernameExists(String username) async {
+    try {
+      final usernameQuery = await _firestore
+          .collection('users')
+          .get();
+
+      for (var doc in usernameQuery.docs) {
+        final data = doc.data();
+        final existingUsername = data['username'] as String?;
+        if (existingUsername != null) {
+          if (existingUsername.toLowerCase().trim() == username.toLowerCase().trim()) {
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Check if email exists (case-insensitive)
+  Future<bool> checkEmailExists(String email) async {
+    try {
+      final emailQuery = await _firestore
+          .collection('users')
+          .get();
+
+      for (var doc in emailQuery.docs) {
+        final data = doc.data();
+        final existingEmail = data['email'] as String?;
+        if (existingEmail != null) {
+          if (existingEmail.toLowerCase().trim() == email.toLowerCase().trim()) {
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (e) {
+      return false;
     }
   }
 

@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Zap It Mobile</string>
+	<string>Zap It</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>zap_it_mobile</string>
+	<string>Zap It</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -45,5 +45,20 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	
+	<!-- Permessi per notifiche push -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<string>background-processing</string>
+	</array>
+	
+	<!-- Permessi per haptic feedback -->
+	<key>NSHapticFeedbackUsageDescription</key>
+	<string>L'app usa l'haptic feedback per le vibrazioni ZAP</string>
+	
+	<!-- Permessi per notifiche -->
+	<key>NSUserNotificationUsageDescription</key>
+	<string>L'app invia notifiche per gli ZAP ricevuti</string>
 </dict>
 </plist>

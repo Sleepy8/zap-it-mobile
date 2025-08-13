@@ -19,6 +19,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
   bool _allowFriendRequests = true;
   bool _showProfileToEveryone = true;
   bool _isLoading = true;
+  bool _previousLastSeenState = true; // Salva lo stato precedente dell'ultimo accesso
 
   @override
   void initState() {
@@ -39,11 +40,11 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
           _showLastSeen = userData['showLastSeen'] ?? true;
           _allowFriendRequests = userData['allowFriendRequests'] ?? true;
           _showProfileToEveryone = userData['showProfileToEveryone'] ?? true;
+          _previousLastSeenState = userData['showLastSeen'] ?? true; // Inizializza con il valore salvato
           _isLoading = false;
         });
       }
     } catch (e) {
-      print('❌ Error loading privacy settings: $e');
       setState(() {
         _isLoading = false;
       });
@@ -58,14 +59,6 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       await _firestore.collection('users').doc(userId).update({
         setting: value,
       });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Impostazione aggiornata'),
-          backgroundColor: AppTheme.limeAccent,
-          duration: const Duration(seconds: 2),
-        ),
-      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -120,11 +113,25 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                       'Mostra stato online',
                       'Gli altri utenti possono vedere quando sei online',
                       _showOnlineStatus,
-                      (value) {
+                      (value) async {
                         setState(() {
                           _showOnlineStatus = value;
+                          if (!value) {
+                            // Se disattivi lo stato online, salva lo stato corrente e disattiva l'ultimo accesso
+                            _previousLastSeenState = _showLastSeen;
+                            _showLastSeen = false;
+                          } else {
+                            // Se riattivi lo stato online, ripristina lo stato precedente dell'ultimo accesso
+                            _showLastSeen = _previousLastSeenState;
+                          }
                         });
-                        _updatePrivacySetting('showOnlineStatus', value);
+                        await _updatePrivacySetting('showOnlineStatus', value);
+                        // Aggiorna anche l'ultimo accesso
+                        if (!value) {
+                          await _updatePrivacySetting('showLastSeen', false);
+                        } else {
+                          await _updatePrivacySetting('showLastSeen', _previousLastSeenState);
+                        }
                       },
                     ),
                     
@@ -133,7 +140,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                     // Ultimo accesso
                     _buildPrivacyOption(
                       'Mostra ultimo accesso',
-                      'Gli altri utenti possono vedere quando ti sei connesso l\'ultima volta',
+                      _showOnlineStatus 
+                          ? 'Gli altri utenti possono vedere quando ti sei connesso l\'ultima volta'
+                          : 'Disabilitato automaticamente quando lo stato online è disattivato',
                       _showLastSeen,
                       (value) {
                         setState(() {
@@ -141,6 +150,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                         });
                         _updatePrivacySetting('showLastSeen', value);
                       },
+                      enabled: _showOnlineStatus, // Disabilita se lo stato online è off
                     ),
                     
                     const SizedBox(height: 20),
@@ -226,8 +236,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
     String title,
     String subtitle,
     bool value,
-    Function(bool) onChanged,
-  ) {
+    Function(bool) onChanged, {
+    bool enabled = true,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -246,7 +257,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 Text(
                   title,
                   style: TextStyle(
-                    color: AppTheme.textPrimary,
+                    color: enabled ? AppTheme.textPrimary : AppTheme.textSecondary,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
@@ -255,7 +266,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 Text(
                   subtitle,
                   style: TextStyle(
-                    color: AppTheme.textSecondary,
+                    color: enabled ? AppTheme.textSecondary : AppTheme.textSecondary.withOpacity(0.5),
                     fontSize: 14,
                   ),
                 ),
@@ -264,9 +275,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
           ),
           Switch(
             value: value,
-            onChanged: onChanged,
-            activeColor: AppTheme.limeAccent,
-            activeTrackColor: AppTheme.limeAccent.withOpacity(0.3),
+            onChanged: enabled ? onChanged : null,
+            activeColor: enabled ? AppTheme.limeAccent : AppTheme.textSecondary.withOpacity(0.3),
+            activeTrackColor: enabled ? AppTheme.limeAccent.withOpacity(0.3) : AppTheme.textSecondary.withOpacity(0.1),
             inactiveThumbColor: AppTheme.textSecondary,
             inactiveTrackColor: AppTheme.textSecondary.withOpacity(0.3),
           ),

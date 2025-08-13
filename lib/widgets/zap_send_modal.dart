@@ -77,7 +77,8 @@ class _ZapSendModalState extends State<ZapSendModal> with TickerProviderStateMix
   }
 
   Future<void> _searchUsers(String query) async {
-    if (query.isEmpty) {
+    // Clear results if query is empty or too short
+    if (query.isEmpty || query.trim().length < 2) {
       setState(() {
         _searchResults = [];
         _isSearching = false;
@@ -85,12 +86,15 @@ class _ZapSendModalState extends State<ZapSendModal> with TickerProviderStateMix
       return;
     }
 
+    // Prevent multiple rapid searches
+    if (_isSearching) return;
+
     setState(() {
       _isSearching = true;
     });
 
     try {
-      final results = await widget.friendsService.searchUsers(query);
+      final results = await widget.friendsService.searchUsers(query.trim());
       setState(() {
         _searchResults = results;
         _isSearching = false;
@@ -294,17 +298,19 @@ class _ZapSendModalState extends State<ZapSendModal> with TickerProviderStateMix
                               fontSize: 16,
                             ),
                             decoration: InputDecoration(
-                              hintText: 'Cerca...',
+                              hintText: _searchController.text.isEmpty 
+                                  ? 'Cerca... (min. 2 caratteri, 50% del nickname)'
+                                  : 'Cerca...',
                               hintStyle: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 16,
                               ),
+                              border: InputBorder.none,
                               prefixIcon: Icon(
                                 Icons.search,
                                 color: AppTheme.limeAccent,
                                 size: 22,
                               ),
-                              border: InputBorder.none,
                               contentPadding: const EdgeInsets.all(18),
                             ),
                           ),

@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vibration/vibration.dart';
 import '../services/auth_service.dart';
 import '../services/friends_service.dart';
 import '../services/messages_service.dart';
 import '../services/notification_service.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/add_friend_modal.dart';
-import '../widgets/zap_send_modal.dart';
 import '../widgets/zap_success_toast.dart';
 import '../widgets/badge_icon.dart';
 import '../screens/messages_screen.dart';
+import '../screens/chat_screen.dart';
 import '../theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -35,6 +36,9 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // Home shake animation
   late AnimationController _homeShakeController;
   late Animation<double> _homeShakeAnimation;
+
+  // Callback for friends count
+  Function(int)? _friendsCountCallback;
 
   @override
   void initState() {
@@ -67,6 +71,8 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             _friends = friends;
             _isLoading = false;
           });
+          // Notify parent about friends count
+          _friendsCountCallback?.call(friends.length);
         }
       });
     } catch (e) {
@@ -86,6 +92,13 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         });
       }
     });
+  }
+
+  // Method to set friends count callback
+  void addFriendsCountListener(Function(int) callback) {
+    _friendsCountCallback = callback;
+    // Call immediately with current count
+    callback(_friends.length);
   }
 
   void _showRemoveFriendDialog(Map<String, dynamic> friend) {
@@ -172,23 +185,14 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  void showZapSendDialog() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => ZapSendModal(
-        friendsService: _friendsService,
-      ),
-    );
-  }
-
   Future<void> _zapFriend(String friendId) async {
     try {
       // Trigger home shake animation
       _homeShakeController.forward().then((_) {
         _homeShakeController.reverse();
       });
+      
+
       
       // Get sender info for notification
       final currentUser = _authService.getCurrentUser();
@@ -238,10 +242,8 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           MaterialPageRoute(
             builder: (context) => ChatScreen(
               conversationId: conversationId,
-              otherUser: {
-                'id': friend['id'],
-                'username': friend['username'],
-              },
+              otherUserId: friend['id'],
+              otherUsername: friend['username'],
             ),
           ),
         );

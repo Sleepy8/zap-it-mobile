@@ -15,7 +15,6 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
   bool _messageNotifications = true;
-  bool _zapNotifications = true;
   bool _friendRequestNotifications = true;
   bool _pauseZaps = false;
   bool _isLoading = true;
@@ -36,14 +35,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         final userData = userDoc.data() as Map<String, dynamic>;
         setState(() {
           _messageNotifications = userData['messageNotifications'] ?? true;
-          _zapNotifications = userData['zapNotifications'] ?? true;
           _friendRequestNotifications = userData['friendRequestNotifications'] ?? true;
           _pauseZaps = userData['pauseZaps'] ?? false;
           _isLoading = false;
         });
       }
     } catch (e) {
-      print('❌ Error loading notification settings: $e');
       setState(() {
         _isLoading = false;
       });
@@ -58,14 +55,6 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       await _firestore.collection('users').doc(userId).update({
         setting: value,
       });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Impostazione aggiornata'),
-          backgroundColor: AppTheme.limeAccent,
-          duration: const Duration(seconds: 2),
-        ),
-      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -126,22 +115,6 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           _messageNotifications = value;
                         });
                         _updateNotificationSetting('messageNotifications', value);
-                      },
-                    ),
-                    
-                    const SizedBox(height: 20),
-                    
-                    // Notifiche ZAP
-                    _buildNotificationOption(
-                      'Notifiche ZAP',
-                      'Ricevi notifiche per i nuovi ZAP',
-                      Icons.flash_on,
-                      _zapNotifications,
-                      (value) {
-                        setState(() {
-                          _zapNotifications = value;
-                        });
-                        _updateNotificationSetting('zapNotifications', value);
                       },
                     ),
                     

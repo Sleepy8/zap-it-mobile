@@ -1,13 +1,15 @@
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import 'encryption_service.dart';
-import '../widgets/zap_notification.dart';
 
 class MessagesService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final EncryptionService _encryptionService = EncryptionService();
+
+  // Timer management for auto-destruction
+  final Map<String, Timer> _autoDestructionTimers = {};
 
   // Get current user ID
   String? get currentUserId => _auth.currentUser?.uid;
@@ -40,6 +42,7 @@ class MessagesService {
           final isArchived = data['isArchived']?[currentUserId] ?? false;
           final isBlocked = data['isBlocked']?[currentUserId] ?? false;
           final isDeleted = data['isDeleted']?[currentUserId] ?? false;
+          final isMarkedForDeletion = data['markedForDeletion']?[currentUserId] ?? false;
           
           // Get last message - simplified to handle both encrypted and plain text
           String lastMessage = data['lastMessage'] ?? '';
@@ -58,17 +61,69 @@ class MessagesService {
             }
           }
           
+          // Determine message status for placeholder
+          String messageStatus = '';
+          if (lastMessage.isNotEmpty) {
+            final lastMessageSenderId = data['lastMessageSenderId'] ?? '';
+            final isLastMessageRead = data['isLastMessageRead']?[currentUserId] ?? false;
+            
+            if (lastMessageSenderId == currentUserId) {
+              // Current user sent the last message
+              messageStatus = 'Messaggio Inviato';
+            } else {
+              // Other user sent the last message
+              if (isLastMessageRead) {
+                messageStatus = 'Ricevuto';
+              } else {
+                messageStatus = 'Nuovo Messaggio';
+              }
+            }
+          } else {
+            // No last message - could be because messages were deleted after 10 seconds
+            // Check if there was recent activity
+            final lastMessageAt = data['lastMessageAt'];
+            if (lastMessageAt != null) {
+              DateTime messageTime;
+              if (lastMessageAt is Timestamp) {
+                messageTime = lastMessageAt.toDate();
+              } else if (lastMessageAt is DateTime) {
+                messageTime = lastMessageAt;
+              } else {
+                messageTime = DateTime.now();
+              }
+              
+              final now = DateTime.now();
+              final elapsedSeconds = now.difference(messageTime).inSeconds;
+              
+              // If less than 30 seconds have passed since last activity, show appropriate placeholder
+              if (elapsedSeconds < 30) {
+                final lastMessageSenderId = data['lastMessageSenderId'] ?? '';
+                if (lastMessageSenderId == currentUserId) {
+                  messageStatus = 'Messaggio Inviato';
+                } else {
+                  messageStatus = 'Nuovo Messaggio';
+                }
+              } else {
+                messageStatus = 'Chat vuota';
+              }
+            } else {
+              messageStatus = 'Chat vuota';
+            }
+          }
+          
           // Only add conversation if not deleted locally
           if (!isDeleted) {
             conversations.add({
               'conversationId': doc.id,
               'otherUserId': otherUserId,
-              'otherUsername': userData['username'] ?? 'Unknown',
+              'otherUsername': userData['username'] ?? 'Utente',
               'lastMessage': lastMessage,
               'lastMessageAt': data['lastMessageAt'],
-              'unreadCount': (data['unreadCount']?[currentUserId] ?? 0) as int,
+              'messageStatus': messageStatus,
+              'unreadCount': data['unreadCount']?[currentUserId] ?? 0,
               'isArchived': isArchived,
               'isBlocked': isBlocked,
+              'isMarkedForDeletion': isMarkedForDeletion,
             });
           }
         }
@@ -78,21 +133,21 @@ class MessagesService {
     });
   }
 
-  // Get messages for a specific conversation
+  // Get messages stream for a conversation (with auto-destruction filtering)
   Stream<List<Map<String, dynamic>>> getMessagesStream(String conversationId) {
+    if (currentUserId == null) return Stream.value([]);
+
     // Initialize E2EE for this conversation
     _encryptionService.initializeConversationE2EE(conversationId);
     // Set current conversation ID for encryption
     _encryptionService.setCurrentConversationId(conversationId);
-    
-    // Check if conversation exists first
+
     return _firestore
         .collection('conversations')
         .doc(conversationId)
         .snapshots()
         .asyncMap((conversationDoc) async {
       if (!conversationDoc.exists) {
-        // Return empty list if conversation doesn't exist
         return <Map<String, dynamic>>[];
       }
       
@@ -108,6 +163,13 @@ class MessagesService {
       
       for (var doc in messagesSnapshot.docs) {
         final data = doc.data();
+        
+        // Check if message is auto-destroyed by current user
+        final autoDestroyedBy = Map<String, bool>.from(data['autoDestroyedBy'] ?? {});
+        if (autoDestroyedBy[currentUserId] == true) {
+          // Skip this message as it's auto-destroyed by current user
+          continue;
+        }
         
         // Get message text - simplified to handle both encrypted and plain text
         String messageText = data['text'] ?? '';
@@ -155,7 +217,6 @@ class MessagesService {
       Map<String, dynamic>? conversationData;
 
       // Check if this is a new conversation (conversationId is actually the otherUserId)
-      // First try to find if this conversation exists
       final conversationDoc = await _firestore
           .collection('conversations')
           .doc(conversationId)
@@ -193,9 +254,13 @@ class MessagesService {
       final messageData = {
         'senderId': currentUserId,
         'text': encryptedText,
-        'isEncrypted': true, // Enable encryption
+        'isEncrypted': true,
         'createdAt': FieldValue.serverTimestamp(),
         'isRead': false,
+        // Auto-destruction fields for 10-second chat
+        'autoDestroyedBy': {}, // Map of user IDs who have auto-destroyed this message
+        'isAutoDestroyed': false, // Global flag for complete destruction
+        'hardDeleteAt': Timestamp.fromDate(DateTime.now().add(Duration(days: 15))), // TTL max 15 giorni
       };
 
       // Add message to conversation
@@ -215,8 +280,11 @@ class MessagesService {
       await _firestore.collection('conversations').doc(realConversationId).update({
         'lastMessage': encryptedLastMessage,
         'lastMessageAt': FieldValue.serverTimestamp(),
-        'isLastMessageEncrypted': true, // Enable encryption
+        'isLastMessageEncrypted': true,
+        'lastMessageSenderId': currentUserId,
+        'isLastMessageRead': {currentUserId: true, otherUserId: false},
         'unreadCount': unreadCount,
+        'markedForDeletion': {currentUserId: false, otherUserId: false},
       });
 
       return {'success': true, 'conversationId': realConversationId};
@@ -231,31 +299,336 @@ class MessagesService {
       final currentUserId = FirebaseAuth.instance.currentUser?.uid;
       if (currentUserId == null) return null;
 
-      // Get other user data
-      final otherUserDoc = await _firestore.collection('users').doc(otherUserId).get();
-      if (!otherUserDoc.exists) {
-        return null;
-      }
-
-      final otherUserData = otherUserDoc.data() as Map<String, dynamic>;
-      final otherUsername = otherUserData['username'] ?? 'Unknown';
-
-      // Create conversation document
       final conversationData = {
         'participants': [currentUserId, otherUserId],
         'createdAt': FieldValue.serverTimestamp(),
         'lastMessageAt': FieldValue.serverTimestamp(),
+        'lastMessage': '',
+        'lastMessageSenderId': '',
+        'isLastMessageRead': {currentUserId: true, otherUserId: true},
+        'unreadCount': {currentUserId: 0, otherUserId: 0},
         'isArchived': {currentUserId: false, otherUserId: false},
         'isBlocked': {currentUserId: false, otherUserId: false},
         'isDeleted': {currentUserId: false, otherUserId: false},
-        'unreadCount': {currentUserId: 0, otherUserId: 0},
-        // Note: sharedKey will be generated when first message is sent
+        'markedForDeletion': {currentUserId: false, otherUserId: false},
       };
 
-      final conversationRef = await _firestore.collection('conversations').add(conversationData);
-      return conversationRef.id;
+      final docRef = await _firestore.collection('conversations').add(conversationData);
+      return docRef.id;
     } catch (e) {
       return null;
+    }
+  }
+
+  // Mark messages as read
+  Future<void> markMessagesAsRead(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      final conversationDoc = await _firestore
+          .collection('conversations')
+          .doc(conversationId)
+          .get();
+
+      if (!conversationDoc.exists) return;
+
+      final conversationData = conversationDoc.data() as Map<String, dynamic>;
+      final unreadCount = Map<String, int>.from(conversationData['unreadCount'] ?? {});
+      final isLastMessageRead = Map<String, bool>.from(conversationData['isLastMessageRead'] ?? {});
+      
+      unreadCount[currentUserId] = 0;
+      isLastMessageRead[currentUserId] = true;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'unreadCount': unreadCount,
+        'isLastMessageRead': isLastMessageRead,
+      });
+    } catch (e) {
+      // Silent error handling
+    }
+  }
+
+  // Chat session management
+  Future<void> onChatEnter(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      // Cancel any existing auto-destruction timer for this conversation
+      _cancelAutoDestructionTimer(conversationId);
+
+      // Update user session
+      await _firestore
+          .collection('chatSessions')
+          .doc(conversationId)
+          .collection('userSessions')
+          .doc(currentUserId)
+          .set({
+        'lastEnterAt': FieldValue.serverTimestamp(),
+        'lastExitAt': null,
+        'lastPurgeReadyAt': null,
+        'openDevices': FieldValue.increment(1),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      // Silent error handling
+    }
+  }
+
+  Future<void> onChatExit(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      // Get current session
+      final sessionDoc = await _firestore
+          .collection('chatSessions')
+          .doc(conversationId)
+          .collection('userSessions')
+          .doc(currentUserId)
+          .get();
+
+      if (sessionDoc.exists) {
+        final sessionData = sessionDoc.data() as Map<String, dynamic>;
+        final currentOpenDevices = sessionData['openDevices'] ?? 0;
+        final newOpenDevices = (currentOpenDevices - 1).clamp(0, double.infinity).toInt();
+
+        if (newOpenDevices == 0) {
+          // Last device closed, schedule auto-destruction
+          final now = FieldValue.serverTimestamp();
+          final purgeReadyAt = Timestamp.fromDate(DateTime.now().add(Duration(seconds: 10)));
+
+          await _firestore
+              .collection('chatSessions')
+              .doc(conversationId)
+              .collection('userSessions')
+              .doc(currentUserId)
+              .update({
+            'lastExitAt': now,
+            'lastPurgeReadyAt': purgeReadyAt,
+            'openDevices': newOpenDevices,
+          });
+
+          // Schedule auto-destruction after 10 seconds
+          _scheduleAutoDestruction(conversationId, currentUserId);
+        } else {
+          // Still has other devices open
+          await _firestore
+              .collection('chatSessions')
+              .doc(conversationId)
+              .collection('userSessions')
+              .doc(currentUserId)
+              .update({
+            'openDevices': newOpenDevices,
+          });
+        }
+      }
+    } catch (e) {
+      // Silent error handling
+    }
+  }
+
+  // Schedule auto-destruction after 10 seconds
+  void _scheduleAutoDestruction(String conversationId, String userId) {
+    // Cancel any existing timer for this conversation
+    _cancelAutoDestructionTimer(conversationId);
+    
+    // Create new timer
+    final timer = Timer(Duration(seconds: 10), () async {
+      try {
+        // Check if user has re-entered the chat
+        final sessionDoc = await _firestore
+            .collection('chatSessions')
+            .doc(conversationId)
+            .collection('userSessions')
+            .doc(userId)
+            .get();
+
+        if (sessionDoc.exists) {
+          final sessionData = sessionDoc.data() as Map<String, dynamic>;
+          final openDevices = sessionData['openDevices'] ?? 0;
+
+          if (openDevices == 0) {
+            // User hasn't re-entered, proceed with auto-destruction
+            await _autoDestroyMessagesForUser(conversationId, userId);
+          }
+        }
+        
+        // Remove timer from map after completion
+        _autoDestructionTimers.remove(conversationId);
+      } catch (e) {
+        _autoDestructionTimers.remove(conversationId);
+      }
+    });
+    
+    // Store the timer
+    _autoDestructionTimers[conversationId] = timer;
+  }
+
+  // Cancel auto-destruction timer for a conversation
+  void _cancelAutoDestructionTimer(String conversationId) {
+    final timer = _autoDestructionTimers[conversationId];
+    if (timer != null) {
+      timer.cancel();
+      _autoDestructionTimers.remove(conversationId);
+    }
+  }
+
+  // Auto-destroy messages for a specific user
+  Future<void> _autoDestroyMessagesForUser(String conversationId, String userId) async {
+    try {
+      // Get all messages not yet auto-destroyed by this user
+      final messagesQuery = await _firestore
+          .collection('conversations')
+          .doc(conversationId)
+          .collection('messages')
+          .where('isAutoDestroyed', isEqualTo: false)
+          .get();
+
+      final batch = _firestore.batch();
+      int updatedCount = 0;
+
+      for (var doc in messagesQuery.docs) {
+        final messageData = doc.data();
+        final autoDestroyedBy = Map<String, bool>.from(messageData['autoDestroyedBy'] ?? {});
+        
+        // Mark message as auto-destroyed by this user
+        autoDestroyedBy[userId] = true;
+        
+        // Check if all participants have auto-destroyed
+        final participants = await _getConversationParticipants(conversationId);
+        bool allDestroyed = true;
+        
+        for (String participantId in participants) {
+          if (!autoDestroyedBy.containsKey(participantId) || !autoDestroyedBy[participantId]!) {
+            allDestroyed = false;
+            break;
+          }
+        }
+        
+        if (allDestroyed) {
+          // All participants have auto-destroyed, mark for deletion
+          batch.update(doc.reference, {
+            'isAutoDestroyed': true,
+            'autoDestroyedBy': autoDestroyedBy,
+          });
+        } else {
+          // Only mark as auto-destroyed by this user
+          batch.update(doc.reference, {
+            'autoDestroyedBy': autoDestroyedBy,
+          });
+        }
+        
+        updatedCount++;
+      }
+
+      await batch.commit();
+    } catch (e) {
+      // Error handling
+    }
+  }
+
+  // Get conversation participants
+  Future<List<String>> _getConversationParticipants(String conversationId) async {
+    try {
+      final conversationDoc = await _firestore
+          .collection('conversations')
+          .doc(conversationId)
+          .get();
+      
+      if (conversationDoc.exists) {
+        final data = conversationDoc.data() as Map<String, dynamic>;
+        return List<String>.from(data['participants'] ?? []);
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Archive conversation
+  Future<void> archiveConversation(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'isArchived.$currentUserId': true,
+      });
+    } catch (e) {
+      // Silent error handling
+    }
+  }
+
+  // Unarchive conversation
+  Future<void> unarchiveConversation(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'isArchived.$currentUserId': false,
+      });
+    } catch (e) {
+      // Silent error handling
+    }
+  }
+
+  // Block conversation
+  Future<void> blockConversation(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'isBlocked.$currentUserId': true,
+      });
+    } catch (e) {
+      // Silent error handling
+    }
+  }
+
+  // Unblock conversation
+  Future<void> unblockConversation(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'isBlocked.$currentUserId': false,
+      });
+    } catch (e) {
+      // Silent error handling
+    }
+  }
+
+  // Delete conversation locally
+  Future<bool> deleteConversationLocally(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return false;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'isDeleted.$currentUserId': true,
+      });
+
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Reset markedForDeletion when user enters chat (cancels timer) - DEPRECATED
+  Future<void> resetMarkedForDeletion(String conversationId) async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'markedForDeletion.$currentUserId': false,
+      });
+    } catch (e) {
+      // Silent error handling
     }
   }
 
@@ -315,8 +688,6 @@ class MessagesService {
       await _firestore.collection('conversations').doc(conversationId).update({
         'isBlocked.$currentUserId': true,
       });
-
-      // User blocked: $otherUserId
     } catch (e) {
       // Silent error handling
     }
@@ -331,183 +702,14 @@ class MessagesService {
       await _firestore.collection('conversations').doc(conversationId).update({
         'isBlocked.$currentUserId': false,
       });
-
-      // User unblocked: $otherUserId
     } catch (e) {
       // Silent error handling
     }
   }
 
-  // Delete conversation locally
-  Future<bool> deleteConversationLocally(String conversationId) async {
-    try {
-      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-      if (currentUserId == null) return false;
-
-      await _firestore.collection('conversations').doc(conversationId).update({
-        'isDeleted.$currentUserId': true,
-      });
-
-      // Conversation deleted locally: $conversationId
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // Mark messages as read
-  Future<void> markMessagesAsRead(String conversationId) async {
-    try {
-      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-      if (currentUserId == null) return;
-
-      // Get conversation data
-      final conversationDoc = await _firestore
-          .collection('conversations')
-          .doc(conversationId)
-          .get();
-
-      if (!conversationDoc.exists) return;
-
-      final conversationData = conversationDoc.data() as Map<String, dynamic>;
-      final unreadCount = Map<String, int>.from(conversationData['unreadCount'] ?? {});
-      
-      // Reset unread count for current user
-      unreadCount[currentUserId] = 0;
-
-      // Update conversation
-      await _firestore.collection('conversations').doc(conversationId).update({
-        'unreadCount': unreadCount,
-      });
-
-      // Messages marked as read for conversation: $conversationId
-    } catch (e) {
-      // Silent error handling
-    }
-  }
-
-  // Archive conversation
-  Future<void> archiveConversation(String conversationId) async {
-    try {
-      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-      if (currentUserId == null) return;
-
-      await _firestore.collection('conversations').doc(conversationId).update({
-        'isArchived.$currentUserId': true,
-      });
-
-      // Conversation archived: $conversationId
-    } catch (e) {
-      // Silent error handling
-    }
-  }
-
-  // Unarchive conversation
-  Future<void> unarchiveConversation(String conversationId) async {
-    try {
-      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-      if (currentUserId == null) return;
-
-      await _firestore.collection('conversations').doc(conversationId).update({
-        'isArchived.$currentUserId': false,
-      });
-
-      // Conversation unarchived: $conversationId
-    } catch (e) {
-      // Silent error handling
-    }
-  }
-
-  // Block conversation
-  Future<void> blockConversation(String conversationId) async {
-    try {
-      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-      if (currentUserId == null) return;
-
-      await _firestore.collection('conversations').doc(conversationId).update({
-        'isBlocked.$currentUserId': true,
-      });
-
-      // Conversation blocked: $conversationId
-    } catch (e) {
-      // Silent error handling
-    }
-  }
-
-  // Unblock conversation
-  Future<void> unblockConversation(String conversationId) async {
-    try {
-      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-      if (currentUserId == null) return;
-
-      await _firestore.collection('conversations').doc(conversationId).update({
-        'isBlocked.$currentUserId': false,
-      });
-
-      // Conversation unblocked: $conversationId
-    } catch (e) {
-      // Silent error handling
-    }
-  }
-
-  // Delete conversation locally
+  // Delete conversation (legacy method - now calls deleteConversationLocally)
   Future<void> deleteConversation(String conversationId) async {
-    try {
-      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-      if (currentUserId == null) return;
-
-      // Mark conversation as deleted for current user
-      await _firestore.collection('conversations').doc(conversationId).update({
-        'isDeleted.$currentUserId': true,
-      });
-
-      // Conversation deleted locally: $conversationId
-
-      // Check if both users have deleted the conversation
-      final conversationDoc = await _firestore.collection('conversations').doc(conversationId).get();
-      if (conversationDoc.exists) {
-        final data = conversationDoc.data() as Map<String, dynamic>;
-        final participants = List<String>.from(data['participants']);
-        final isDeleted = data['isDeleted'] as Map<String, dynamic>? ?? {};
-        
-        // Check if all participants have deleted the conversation
-        bool allDeleted = true;
-        for (String participantId in participants) {
-          if (isDeleted[participantId] != true) {
-            allDeleted = false;
-            break;
-          }
-        }
-        
-        // If all participants have deleted, remove the conversation from database
-        if (allDeleted) {
-          // All participants have deleted conversation, removing from database: $conversationId
-          
-          // Delete all messages in the conversation
-          final messagesQuery = await _firestore
-              .collection('conversations')
-              .doc(conversationId)
-              .collection('messages')
-              .get();
-          
-          // Delete messages in batches
-          final batch = _firestore.batch();
-          for (var doc in messagesQuery.docs) {
-            batch.delete(doc.reference);
-          }
-          await batch.commit();
-          
-          // Delete the conversation document
-          await _firestore.collection('conversations').doc(conversationId).delete();
-          
-          // Conversation and all messages permanently deleted: $conversationId
-        } else {
-          // Conversation marked as deleted for current user, waiting for other participant: $conversationId
-        }
-      }
-    } catch (e) {
-      // Silent error handling
-    }
+    await deleteConversationLocally(conversationId);
   }
 
   // Get conversation by ID
@@ -557,10 +759,17 @@ class MessagesService {
       await _firestore.collection('conversations').doc(conversationId).update({
         'isDeleted.$currentUserId': false,
       });
-
-      // Conversation restored: $conversationId
     } catch (e) {
       // Silent error handling
     }
+  }
+
+  // Dispose method to clean up timers
+  void dispose() {
+    // Cancel all active timers
+    for (final timer in _autoDestructionTimers.values) {
+      timer.cancel();
+    }
+    _autoDestructionTimers.clear();
   }
 }

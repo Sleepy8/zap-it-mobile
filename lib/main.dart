@@ -15,7 +15,9 @@ import 'screens/user_profile_screen.dart';
 import 'screens/privacy_settings_screen.dart';
 import 'screens/notification_settings_screen.dart';
 import 'screens/edit_profile_screen.dart';
-import 'screens/test_screen.dart';
+import 'screens/blocked_users_screen.dart';
+import 'screens/chat_screen.dart';
+
 import 'screens/fallback_screen.dart';
 import 'firebase_init.dart';
 import 'services/background_service.dart';
@@ -23,30 +25,21 @@ import 'services/auth_service.dart';
 import 'widgets/animated_logo.dart';
 import 'services/notification_service.dart';
 import 'services/online_status_service.dart';
-import 'debug_helper.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Enable debug logging in debug mode
-  if (kDebugMode) {
-    DebugHelper.log('App starting in ULTRA SIMPLE mode');
-    DebugHelper.logPlatformInfo();
-  }
+
   
   // Always try to initialize Firebase, but don't crash if it fails
   bool firebaseInitialized = false;
   try {
-    if (Platform.isIOS) {
-      DebugHelper.log('Attempting Firebase initialization on iOS');
-    }
     await initializeFirebase();
     firebaseInitialized = true;
-    DebugHelper.log('Firebase initialized successfully');
   } catch (e) {
-    DebugHelper.logError('Firebase initialization failed', e);
     firebaseInitialized = false;
   }
   
@@ -55,7 +48,6 @@ void main() async {
     try {
       await _initializeServices();
     } catch (e) {
-      DebugHelper.logError('Services initialization failed', e);
       // Continue with app even if services fail
     }
   }
@@ -68,28 +60,22 @@ Future<void> _initializeServices() async {
   try {
     final notificationService = NotificationService();
     await notificationService.initializePushNotifications();
-    
-    DebugHelper.log('Notification service initialized');
   } catch (e) {
-    DebugHelper.logError('Notification service initialization failed', e);
     // Don't crash the app if notifications fail
   }
 
   // Start background service with better error handling
   try {
     await BackgroundService().start();
-    DebugHelper.log('Background service started');
   } catch (e) {
-    DebugHelper.logError('Background service initialization failed', e);
     // Don't crash the app if background service fails
   }
 
   // Initialize online status service
   try {
-    OnlineStatusService().initialize();
-    DebugHelper.log('Online status service initialized');
+    final onlineStatusService = OnlineStatusService();
+    onlineStatusService.initialize();
   } catch (e) {
-    DebugHelper.logError('Online status service initialization failed', e);
     // Don't crash the app if online status fails
   }
 }
@@ -137,14 +123,15 @@ class ZapItApp extends StatelessWidget {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
           return ChatScreen(
             conversationId: args['conversationId'],
-            otherUser: args['otherUser'],
+            otherUserId: args['otherUserId'],
+            otherUsername: args['otherUsername'],
           );
         },
         '/fallback': (context) => FallbackScreen(),
         '/privacy-settings': (context) => const PrivacySettingsScreen(),
         '/notification-settings': (context) => const NotificationSettingsScreen(),
         '/edit-profile': (context) => const EditProfileScreen(),
-        '/test': (context) => const TestScreen(),
+        '/blocked-users': (context) => const BlockedUsersScreen(),
       },
     );
   }
@@ -183,14 +170,21 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
         Future.delayed(timeoutDuration),
       ]);
       
+      // Check if user is already authenticated immediately after Firebase init
+      final currentUser = _authService.getCurrentUser();
+      final isAuthenticated = currentUser != null;
+      
       if (mounted) {
         setState(() {
           _isInitialized = true;
           _isLoading = false;
+          // If user is already authenticated, we don't need to show login screen
+          if (isAuthenticated) {
+            _hasError = false;
+          }
         });
       }
     } catch (e) {
-      DebugHelper.logError('App initialization error', e);
       if (mounted) {
         setState(() {
           _isInitialized = true;
@@ -205,9 +199,8 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
     try {
       // Wait for Firebase to be ready
       await Future.delayed(const Duration(milliseconds: 500));
-      DebugHelper.log('Firebase initialization completed');
     } catch (e) {
-      DebugHelper.logError('Firebase wait failed', e);
+      // Silent error handling
     }
   }
 
@@ -227,7 +220,7 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
         try {
           OnlineStatusService().setOnline();
         } catch (e) {
-          DebugHelper.logError('Failed to set online status', e);
+          // Silent error handling
         }
         break;
       case AppLifecycleState.paused:
@@ -237,7 +230,7 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
         try {
           OnlineStatusService().setOffline();
         } catch (e) {
-          DebugHelper.logError('Failed to set offline status', e);
+          // Silent error handling
         }
         break;
       case AppLifecycleState.inactive:
@@ -245,7 +238,7 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
         try {
           OnlineStatusService().setOffline();
         } catch (e) {
-          DebugHelper.logError('Failed to set offline status', e);
+          // Silent error handling
         }
         break;
     }
@@ -256,29 +249,24 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
     try {
       final notificationService = NotificationService();
       notificationService.setNavigationCallback((conversationId, senderId, senderName) {
-        print('🎯 Navigation callback called with: conversationId=$conversationId, senderId=$senderId, senderName=$senderName');
-        print('🎯 Navigator key available: ${ZapItApp.navigatorKey.currentState != null}');
-        
         if (ZapItApp.navigatorKey.currentState != null) {
-          print('🎯 Attempting navigation to /chat');
           ZapItApp.navigatorKey.currentState!.pushNamed(
             '/chat',
             arguments: {
               'conversationId': conversationId,
-              'otherUser': {
-                'id': senderId,
-                'username': senderName,
-              },
+              'otherUserId': senderId,
+              'otherUsername': senderName,
             },
           );
-          print('🎯 Navigation command sent');
-        } else {
-          print('❌ Navigator key not available');
         }
       });
-      print('✅ Navigation callback set');
+      
+      // Check for pending navigation after setting callback
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        notificationService.checkPendingNavigation();
+      });
     } catch (e) {
-      DebugHelper.logError('Failed to set navigation callback', e);
+      // Silent error handling
     }
   }
 
@@ -289,9 +277,18 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
       return const SplashScreen();
     }
     
+    // Check if user is already authenticated before showing login screen
+    final currentUser = _authService.getCurrentUser();
+    if (currentUser != null) {
+      // User is already authenticated, go directly to MainScreen
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _setNavigationCallback();
+      });
+      return const MainScreen();
+    }
+    
     // Handle error state or timeout
     if (_hasError) {
-      DebugHelper.log('Showing login screen due to error or timeout');
       return const LoginScreen();
     }
     
@@ -305,7 +302,6 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
         
         // Handle error state
         if (snapshot.hasError) {
-          DebugHelper.logError('Auth stream error', snapshot.error);
           return const LoginScreen();
         }
         

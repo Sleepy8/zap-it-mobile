@@ -82,8 +82,22 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         return Colors.grey[400]!; // Argento
       case 3:
         return Colors.brown[300]!; // Bronzo
+      case 4:
+        return Colors.purple[400]!; // Viola
+      case 5:
+        return Colors.blue[400]!; // Blu
+      case 6:
+        return Colors.teal[400]!; // Verde acqua
+      case 7:
+        return Colors.indigo[400]!; // Indaco
+      case 8:
+        return Colors.deepOrange[400]!; // Arancione scuro
+      case 9:
+        return Colors.pink[400]!; // Rosa
+      case 10:
+        return Colors.cyan[400]!; // Ciano
       default:
-        return AppTheme.limeAccent;
+        return Colors.grey[600]!; // Grigio scuro per gli altri
     }
   }
 
@@ -106,7 +120,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         child: Text(
           '$rank',
           style: TextStyle(
-            color: rank <= 3 ? AppTheme.primaryDark : AppTheme.limeAccent,
+            color: rank <= 3 ? AppTheme.primaryDark : Colors.white,
             fontWeight: FontWeight.bold,
             fontSize: 14,
           ),
@@ -352,9 +366,27 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const SizedBox(height: 4),
-                                    if (_selectedFilter == 'streak' && user['streak'] > 0)
-                                      _buildStreakIndicator(user['streak']),
-                                    const SizedBox(height: 4),
+                                    if (_selectedFilter == 'streak' && user['streak'] > 0) ...[
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.local_fire_department,
+                                            color: Colors.orange,
+                                            size: 16,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${user['streak']} giorni consecutivi',
+                                            style: TextStyle(
+                                              color: Colors.orange,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                    ],
                                     Text(
                                       _getFilterDescription(),
                                       style: TextStyle(
@@ -373,7 +405,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                                           ? '${user['streak']} 🔥'
                                           : '${user[_selectedFilter]}',
                                       style: TextStyle(
-                                        color: AppTheme.limeAccent,
+                                        color: _selectedFilter == 'streak' ? Colors.orange : AppTheme.limeAccent,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 18,
                                       ),

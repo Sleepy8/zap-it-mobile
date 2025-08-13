@@ -9,7 +9,8 @@ import '../services/friends_service.dart';
 import '../widgets/custom_button.dart';
 import '../theme.dart';
 import '../services/encryption_service.dart';
-import '../widgets/zap_test_widget.dart';
+import 'blocked_users_screen.dart';
+
 import 'dart:typed_data'; // Added for Uint8List
 import 'dart:convert'; // Added for utf8.encode
 
@@ -36,6 +37,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    
+    // Start account deletion listener to handle automatic logout
+    _authService.startAccountDeletionListener(context);
+  }
+
+  @override
+  void dispose() {
+    // Stop account deletion listener
+    _authService.stopAccountDeletionListener();
+    super.dispose();
   }
 
   Future<void> _loadUserData() async {
@@ -247,45 +258,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // Test Firebase Storage connection
-  Future<bool> _testFirebaseStorage() async {
-    try {
-      
-      
-      final user = _authService.getCurrentUser();
-      if (user == null) {
-        
-        return false;
-      }
-      
-      // Try to create a test reference
-      final testRef = _storage.ref().child('test/${user.uid}_test.txt');
-      
-      
-      // Try to upload a small test file
-      final testData = Uint8List.fromList(utf8.encode('test'));
-      final metadata = SettableMetadata(contentType: 'text/plain');
-      
-      
-      final uploadTask = testRef.putData(testData, metadata);
-      
-      final snapshot = await uploadTask;
-      
-      
-      // Clean up test file
-      await testRef.delete();
-      
-      
-      return true;
-    } catch (e) {
-      
-      if (e is FirebaseException) {
-        
-        
-      }
-      return false;
-    }
-  }
+
 
   void _showImagePickerDialog() {
     showModalBottomSheet(
@@ -360,58 +333,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _testLoginPersistence() async {
-    try {
-      
-      
-      // Test SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-      final userId = prefs.getString('userId');
-      final userEmail = prefs.getString('userEmail');
-      
-      
-      
-      
-      
-      
-      // Test Firebase Auth
-      final user = _authService.getCurrentUser();
-      
-      
-      // Test force refresh
-      final refreshResult = await _authService.forceRefreshSession();
-      
-      
-      // Show results
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Login Test:\n'
-              'SharedPrefs: $isLoggedIn\n'
-              'Firebase: ${user != null ? 'OK' : 'NULL'}\n'
-              'Refresh: $refreshResult',
+  void _showDeleteAccountDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Conferma Eliminazione'),
+          content: const Text('Sei sicuro di voler eliminare il tuo account? Questa azione è irreversibile.'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Annulla'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
             ),
-            backgroundColor: isLoggedIn && user != null 
-                ? AppTheme.limeAccent 
-                : AppTheme.errorColor,
-            duration: const Duration(seconds: 8),
-          ),
+            TextButton(
+              child: const Text('Elimina'),
+              onPressed: () async {
+                Navigator.of(context).pop(); // Close dialog
+                try {
+                  // Show loading indicator
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Eliminazione account in corso...'),
+                      backgroundColor: AppTheme.limeAccent,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                  
+                  await _authService.deleteAccount();
+                  
+                  // Navigate to login page
+                  if (mounted) {
+                    Navigator.of(context).pushNamedAndRemoveUntil(
+                      '/login',
+                      (route) => false,
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Errore durante l\'eliminazione dell\'account: $e'),
+                        backgroundColor: AppTheme.errorColor,
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
+          ],
         );
-      }
-    } catch (e) {
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Test error: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    }
+      },
+    );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -679,6 +656,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               Navigator.pushNamed(context, '/privacy-settings');
                             },
                           ),
+                          _buildSettingItem(
+                            icon: Icons.block,
+                            title: 'Utenti Bloccati',
+                            onTap: () {
+                              Navigator.pushNamed(context, '/blocked-users');
+                            },
+                          ),
                         ],
                       ),
                     ),
@@ -744,52 +728,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     
                     const SizedBox(height: 32),
                     
-                    // ZAP Test Widget
-                    const ZapTestWidget(),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // Test Login Persistence
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceDark,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppTheme.limeAccent.withOpacity(0.2),
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Test Login Persistence',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Tap to test if login state is saved',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          CustomButton(
-                            text: 'Test Login State',
-                            onPressed: _testLoginPersistence,
-                            isLoading: false,
-                          ),
-                        ],
-                      ),
+                    // Delete account button
+                    CustomButton(
+                      text: 'Elimina Account',
+                      onPressed: _showDeleteAccountDialog,
+                      backgroundColor: Colors.red,
+                      textColor: Colors.white,
                     ),
-                    
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 16),
                     
                     // Logout button
                     CustomButton(

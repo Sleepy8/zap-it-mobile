@@ -5,7 +5,9 @@ import '../services/messages_service.dart';
 import '../services/friends_service.dart';
 import '../theme.dart';
 import '../widgets/profile_picture.dart';
+import '../widgets/online_status_indicator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'chat_screen.dart';
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({Key? key}) : super(key: key);
@@ -53,6 +55,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
         final currentUserId = FirebaseAuth.instance.currentUser?.uid;
         bool isArchived = false;
         bool isBlocked = false;
+        bool isLocallyDeleted = false;
         
         if (currentUserId != null) {
           // Handle both old format (bool) and new format (Map)
@@ -70,6 +73,15 @@ class _MessagesScreenState extends State<MessagesScreen> {
           } else if (blockedValue is bool) {
             isBlocked = blockedValue;
           }
+          
+          // Check if current user has deleted this conversation locally
+          final localDeletion = List<String>.from(conv['localDeletion'] ?? []);
+          isLocallyDeleted = localDeletion.contains(currentUserId);
+        }
+        
+        // Don't show conversations that are locally deleted
+        if (isLocallyDeleted) {
+          return false;
         }
         
         if (_showArchived) {
@@ -93,10 +105,21 @@ class _MessagesScreenState extends State<MessagesScreen> {
         setState(() {
           _allConversations = conversations;
           _conversations = conversations.where((conv) {
-            // MessagesService already processes isArchived and isBlocked correctly
-            // Just filter based on the processed values
+            final currentUserId = FirebaseAuth.instance.currentUser?.uid;
             final isArchived = conv['isArchived'] ?? false;
             final isBlocked = conv['isBlocked'] ?? false;
+            
+            // Check if current user has deleted this conversation locally
+            bool isLocallyDeleted = false;
+            if (currentUserId != null) {
+              final localDeletion = List<String>.from(conv['localDeletion'] ?? []);
+              isLocallyDeleted = localDeletion.contains(currentUserId);
+            }
+            
+            // Don't show conversations that are locally deleted
+            if (isLocallyDeleted) {
+              return false;
+            }
             
             if (_showArchived) {
               // Show only archived conversations (not blocked)
@@ -268,12 +291,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
         context,
         MaterialPageRoute(
           builder: (context) => ChatScreen(
-            conversationId: null, // null means new conversation
-            otherUser: friend,
-            onConversationDeleted: () {
-              // Force refresh when conversation is deleted
-              _loadData();
-            },
+            conversationId: '', // empty string means new conversation
+            otherUserId: friend['id'],
+            otherUsername: friend['username'],
           ),
         ),
       ).then((_) {
@@ -726,7 +746,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
     return Scaffold(
       backgroundColor: AppTheme.primaryDark,
       appBar: AppBar(
-        title: const Text('💬 Messaggi'),
+        title: const Text('Messaggi'),
         backgroundColor: Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
@@ -902,21 +922,94 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                       ),
                                   ],
                                 ),
-                                title: Text(
-                                  conversation['otherUsername'],
-                                  style: TextStyle(
-                                    color: AppTheme.textPrimary,
-                                    fontWeight: conversation['unreadCount'] > 0 
-                                        ? FontWeight.bold 
-                                        : FontWeight.normal,
-                                  ),
+                                title: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      conversation['otherUsername'],
+                                      style: TextStyle(
+                                        color: AppTheme.textPrimary,
+                                        fontWeight: conversation['unreadCount'] > 0 
+                                            ? FontWeight.bold 
+                                            : FontWeight.normal,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Row(
+                                      children: [
+                                        OnlineStatusIndicator(
+                                          userId: conversation['otherUserId'],
+                                          size: 8,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        StreamBuilder<DocumentSnapshot>(
+                                          stream: FirebaseFirestore.instance
+                                              .collection('users')
+                                              .doc(conversation['otherUserId'])
+                                              .snapshots(),
+                                          builder: (context, snapshot) {
+                                            if (!snapshot.hasData) return const SizedBox.shrink();
+                                            
+                                            final userData = snapshot.data!.data() as Map<String, dynamic>?;
+                                            if (userData == null) return const SizedBox.shrink();
+                                            
+                                            final showOnlineStatus = userData['showOnlineStatus'] ?? true;
+                                            final showLastSeen = userData['showLastSeen'] ?? true;
+                                            
+                                            if (!showOnlineStatus && !showLastSeen) {
+                                              return const SizedBox.shrink();
+                                            }
+                                            
+                                            final isOnline = userData['isOnline'] ?? false;
+                                            final lastSeen = userData['lastSeen'] as Timestamp?;
+                                            
+                                            if (isOnline && showOnlineStatus) {
+                                              return Text(
+                                                'Online',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: AppTheme.limeAccent,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              );
+                                            } else if (lastSeen != null && showLastSeen) {
+                                              final now = DateTime.now();
+                                              final difference = now.difference(lastSeen.toDate());
+                                              
+                                              String statusText;
+                                              if (difference.inMinutes < 1) {
+                                                statusText = 'ora';
+                                              } else if (difference.inMinutes < 60) {
+                                                statusText = '${difference.inMinutes}m fa';
+                                              } else if (difference.inHours < 24) {
+                                                statusText = '${difference.inHours}h fa';
+                                              } else {
+                                                statusText = '${difference.inDays}g fa';
+                                              }
+                                              
+                                              return Text(
+                                                statusText,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: AppTheme.textSecondary,
+                                                ),
+                                              );
+                                            }
+                                            
+                                            return const SizedBox.shrink();
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const SizedBox(height: 4),
                                     Text(
-                                      conversation['lastMessage'] ?? 'Nessun messaggio',
+                                      _getMessagePreview(conversation),
                                       style: TextStyle(
                                         color: AppTheme.textSecondary,
                                         fontSize: 12,
@@ -948,10 +1041,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                     MaterialPageRoute(
                                       builder: (context) => ChatScreen(
                                         conversationId: conversation['conversationId'],
-                                        otherUser: {
-                                          'id': conversation['otherUserId'],
-                                          'username': conversation['otherUsername'],
-                                        },
+                                        otherUserId: conversation['otherUserId'],
+                                        otherUsername: conversation['otherUsername'],
                                       ),
                                     ),
                                   );
@@ -975,748 +1066,41 @@ class _MessagesScreenState extends State<MessagesScreen> {
       ),
     );
   }
+
+  String _getMessagePreview(Map<String, dynamic> conversation) {
+    final unreadCount = conversation['unreadCount'] ?? 0;
+    final lastMessage = conversation['lastMessage'] ?? '';
+    final lastMessageAt = conversation['lastMessageAt'];
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    final markedForDeletion = conversation['markedForDeletion'] as Map<String, dynamic>? ?? {};
+    
+    // Check if current user has deleted this conversation locally
+    if (currentUserId != null && markedForDeletion[currentUserId] == true) {
+      return 'Nessun messaggio';
+    }
+    
+    // Use the messageStatus from the service if available (this handles the 10-second logic)
+    final messageStatus = conversation['messageStatus'] ?? '';
+    if (messageStatus.isNotEmpty) {
+      return messageStatus;
+    }
+    
+    // Fallback logic if messageStatus is not available
+    final lastMessageSenderId = conversation['lastMessageSenderId'];
+    bool isSender = currentUserId != null && lastMessageSenderId == currentUserId;
+    
+    if (unreadCount > 0) {
+      return 'Nuovo messaggio';
+    } else if (lastMessage.isNotEmpty) {
+      if (isSender) {
+        return 'Messaggio inviato';
+      } else {
+        return 'Ricevuto';
+      }
+    } else {
+      return 'Nessun messaggio';
+    }
+  }
 }
 
-// Chat screen will be implemented next
-class ChatScreen extends StatefulWidget {
-  final String? conversationId; // Can be null for new conversations
-  final Map<String, dynamic> otherUser;
-  final VoidCallback? onConversationDeleted;
-
-  const ChatScreen({
-    Key? key,
-    required this.conversationId,
-    required this.otherUser,
-    this.onConversationDeleted,
-  }) : super(key: key);
-
-  @override
-  State<ChatScreen> createState() => _ChatScreenState();
-}
-
-class _ChatScreenState extends State<ChatScreen> {
-  final _messagesService = MessagesService();
-  final TextEditingController _textController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-  List<Map<String, dynamic>> _messages = [];
-  bool _isLoading = true;
-  StreamSubscription? _messagesSubscription;
-  Map<String, dynamic>? _otherUserData;
-  Timer? _refreshTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMessages();
-    _loadOtherUserData();
-    
-    // Start periodic refresh to ensure online status updates
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      if (mounted) {
-        setState(() {}); // Force rebuild to update online status
-      }
-    });
-    
-    // Mark messages as read immediately when opening chat (only if conversation exists)
-    if (widget.conversationId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _messagesService.markMessagesAsRead(widget.conversationId!);
-        // Force refresh of conversations list to update unread counts
-        setState(() {});
-      });
-    }
-  }
-
-  void _loadOtherUserData() {
-    FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.otherUser['id'])
-        .get()
-        .then((snapshot) {
-      if (snapshot.exists) {
-        setState(() {
-          _otherUserData = snapshot.data() as Map<String, dynamic>;
-        });
-      }
-    });
-  }
-
-  void _loadMessages() {
-    if (widget.conversationId != null) {
-      _messagesSubscription?.cancel(); // Cancel previous subscription
-      _messagesSubscription = _messagesService.getMessagesStream(widget.conversationId!).listen((messages) {
-        if (mounted) {
-          setState(() {
-            _messages = messages.toList(); // Show newest at bottom (no reverse needed)
-            _isLoading = false;
-          });
-          
-          // Scroll to bottom to show latest messages - with delay to ensure ListView is built
-          Future.delayed(const Duration(milliseconds: 100), () {
-            if (mounted && _scrollController.hasClients && _messages.isNotEmpty) {
-              _scrollController.animateTo(
-                _scrollController.position.maxScrollExtent,
-                duration: const Duration(milliseconds: 500),
-                curve: Curves.easeOut,
-              );
-            }
-          });
-        }
-      });
-    } else {
-      // New conversation, no messages to load
-      setState(() {
-        _messages = [];
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _sendMessage([String? value]) async {
-    final text = (value ?? _textController.text).trim();
-    if (text.isEmpty) return;
-    
-    _textController.clear();
-    setState(() {}); // Update send button state
-    
-    final conversationId = widget.conversationId ?? widget.otherUser['id'];
-    
-    try {
-      final result = await _messagesService.sendMessage(conversationId, text);
-      
-      final success = result['success'] as bool;
-      final newConversationId = result['conversationId'] as String?;
-      
-      if (success && widget.conversationId == null && newConversationId != null) {
-        // If this was a new conversation, start listening to messages for the new conversation
-        _loadMessages(); // Force refresh to show new messages
-      }
-      
-      // Scroll to bottom after sending message
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-      
-      if (!success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Errore nell\'invio del messaggio'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Errore: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    }
-    // Don't add message locally - let the stream handle it
-  }
-
-  String _formatMessageTime(dynamic timestamp) {
-    if (timestamp == null) return '';
-    
-    final date = timestamp.toDate();
-    return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-  }
-
-  String _formatMessageDate(dynamic timestamp) {
-    if (timestamp == null) return '';
-    
-    final date = timestamp.toDate();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final messageDate = DateTime(date.year, date.month, date.day);
-    
-    if (messageDate == today) {
-      return 'Oggi alle ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    } else if (messageDate == today.subtract(const Duration(days: 1))) {
-      return 'Ieri alle ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    } else {
-      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} alle ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    }
-  }
-
-  void _showChatOptions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.surfaceDark,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.textSecondary,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(
-                Icons.person,
-                color: AppTheme.limeAccent,
-              ),
-              title: Text(
-                'Profilo di @${widget.otherUser['username']}',
-                style: TextStyle(color: AppTheme.textPrimary),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(
-                  context,
-                  '/user-profile',
-                  arguments: {
-                    'userId': widget.otherUser['id'],
-                    'username': widget.otherUser['username'],
-                  },
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.notifications_off,
-                color: AppTheme.limeAccent,
-              ),
-              title: Text(
-                'Silenzia notifiche',
-                style: TextStyle(color: AppTheme.textPrimary),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: Implement mute notifications
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.block,
-                color: AppTheme.errorColor,
-              ),
-              title: Text(
-                'Blocca utente',
-                style: TextStyle(color: AppTheme.errorColor),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _showBlockConfirmation();
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.delete_forever,
-                color: AppTheme.errorColor,
-              ),
-              title: Text(
-                'Archivia chat',
-                style: TextStyle(color: AppTheme.textPrimary),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _showDeleteConfirmation({
-                  'conversationId': widget.conversationId,
-                  'otherUsername': widget.otherUser['username'],
-                });
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showBlockConfirmation() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceDark,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Text(
-          'Blocca @${widget.otherUser['username']}?',
-          style: TextStyle(color: AppTheme.textPrimary),
-        ),
-        content: Text(
-          'Non potrai più ricevere messaggi da questo utente. Puoi sbloccare in qualsiasi momento dalle impostazioni.',
-          style: TextStyle(color: AppTheme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Annulla',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                if (widget.conversationId != null) {
-                  await _messagesService.blockUser(widget.conversationId!, widget.otherUser['id']);
-                }
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('@${widget.otherUser['username']} bloccato'),
-                      backgroundColor: AppTheme.limeAccent,
-                    ),
-                  );
-                  Navigator.pop(context); // Go back to messages screen
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Errore nel bloccare l\'utente: $e'),
-                      backgroundColor: AppTheme.errorColor,
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.errorColor,
-            ),
-            child: const Text(
-              'Blocca',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteConfirmation([Map<String, dynamic>? conversation]) {
-    final username = conversation?['otherUsername'] ?? '';
-    final conversationId = conversation?['conversationId'];
-    
-    // If no conversation exists, show a message
-    if (conversationId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nessuna conversazione da eliminare'),
-          backgroundColor: AppTheme.warningColor,
-        ),
-      );
-      return;
-    }
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceDark,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Text(
-          'Elimina chat con @$username?',
-          style: TextStyle(color: AppTheme.textPrimary),
-        ),
-        content: Text(
-          'La chat verrà eliminata solo per te. Se anche l\'altro utente elimina la chat, allora verrà cancellata definitivamente dal database.',
-          style: TextStyle(color: AppTheme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Annulla',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                final success = await _messagesService.deleteConversationLocally(conversationId);
-                if (mounted) {
-                  // Torna indietro alla lista delle conversazioni
-                  if (success) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Chat con @$username eliminata'),
-                        backgroundColor: AppTheme.limeAccent,
-                      ),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Errore nell\'eliminare la chat'),
-                        backgroundColor: AppTheme.errorColor,
-                      ),
-                    );
-                  }
-                  await Future.delayed(const Duration(milliseconds: 300));
-                  Navigator.pop(context); // Go back to messages screen
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Errore nell\'archiviare la chat: $e'),
-                      backgroundColor: AppTheme.errorColor,
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.errorColor,
-            ),
-            child: const Text(
-              'Elimina',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.primaryDark,
-      appBar: AppBar(
-        title: Row(
-          children: [
-            FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(widget.otherUser['id'])
-                  .get(),
-              builder: (context, snapshot) {
-                String? profileImageUrl;
-                if (snapshot.hasData && snapshot.data!.exists) {
-                  final userData = snapshot.data!.data() as Map<String, dynamic>;
-                  profileImageUrl = userData['profileImageUrl'];
-                }
-                
-                return CircleAvatar(
-              radius: 16,
-              backgroundColor: AppTheme.limeAccent.withOpacity(0.2),
-                  backgroundImage: profileImageUrl != null 
-                      ? NetworkImage(profileImageUrl)
-                      : null,
-                  child: profileImageUrl == null
-                      ? Text(
-                (widget.otherUser['username'] as String).substring(0, 1).toUpperCase(),
-                style: TextStyle(
-                  color: AppTheme.limeAccent,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-                        )
-                      : null,
-                );
-              },
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.pushNamed(
-                          context,
-                          '/user-profile',
-                          arguments: {
-                            'userId': widget.otherUser['id'],
-                            'username': widget.otherUser['username'],
-                          },
-                        );
-                      },
-                      child: Text(
-                        '${widget.otherUser['username']}',
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    // Stato di attività in tempo reale
-                    StreamBuilder<DocumentSnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(widget.otherUser['id'])
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData && snapshot.data!.exists) {
-                          final userData = snapshot.data!.data() as Map<String, dynamic>;
-                          final lastSeen = userData['lastSeen'] as Timestamp?;
-                          final isOnline = userData['isOnline'] as bool? ?? false;
-                          
-                          // Mostra "Online" solo se l'utente è effettivamente online
-                          if (isOnline && lastSeen != null) {
-                            final now = Timestamp.now();
-                            final difference = now.toDate().difference(lastSeen.toDate());
-                            // Considera online se l'ultima attività è stata negli ultimi 2 minuti
-                            if (difference.inMinutes < 2) {
-                              return Text(
-                                'Online',
-                                style: TextStyle(
-                                  color: AppTheme.limeAccent,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              );
-                            }
-                          }
-                        }
-                        return const SizedBox.shrink();
-                      },
-                    ),
-                  ],
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context);
-            // Force refresh when going back to update unread counts
-            setState(() {});
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: _showChatOptions,
-            tooltip: 'Opzioni chat',
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Messages list
-            Expanded(
-              child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(AppTheme.limeAccent),
-                      ),
-                    )
-                  : _messages.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.limeAccent.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(40),
-                                  border: Border.all(
-                                    color: AppTheme.limeAccent.withOpacity(0.3),
-                                    width: 2,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.chat_bubble_outline,
-                                  size: 40,
-                                  color: AppTheme.limeAccent,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Nessun messaggio',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: AppTheme.textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Inizia la conversazione!',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(20),
-                          itemCount: _messages.length,
-                          controller: _scrollController,
-                          reverse: false, // Keep normal order (oldest to newest)
-                          itemBuilder: (context, index) {
-                            final message = _messages[index];
-                            final isCurrentUser = message['isCurrentUser'];
-                            final messageId = message['id'] ?? index.toString(); // Get message ID for animation
-                            
-                            // Auto-scroll to bottom when last message is built
-                            if (index == _messages.length - 1) {
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (_scrollController.hasClients) {
-                                  _scrollController.animateTo(
-                                    _scrollController.position.maxScrollExtent,
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeOut,
-                                  );
-                                }
-                              });
-                            }
-
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: Row(
-                                mainAxisAlignment: isCurrentUser 
-                                    ? MainAxisAlignment.end 
-                                    : MainAxisAlignment.start,
-                                children: [
-                                  if (!isCurrentUser) ...[
-                                    ProfilePicture(
-                                      userId: widget.otherUser['id'],
-                                      size: 28,
-                                      showBorder: false,
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                  Flexible(
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isCurrentUser 
-                                            ? AppTheme.limeAccent 
-                                            : AppTheme.surfaceDark,
-                                        borderRadius: BorderRadius.circular(18),
-                                      ),
-                                      child: Text(
-                                        message['text'],
-                                        style: TextStyle(
-                                          color: isCurrentUser 
-                                              ? AppTheme.primaryDark 
-                                              : AppTheme.textPrimary,
-                                          fontSize: 15,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-            ),
-            // Message input
-            Container(
-              padding: const EdgeInsets.all(20), // Increased padding
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceDark,
-                border: Border(
-                  top: BorderSide(
-                    color: AppTheme.limeAccent.withOpacity(0.1),
-                    width: 1,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryDark,
-                        borderRadius: BorderRadius.circular(25),
-                        border: Border.all(
-                          color: AppTheme.limeAccent.withOpacity(0.5),
-                          width: 1.5, // Single clean border
-                        ),
-                      ),
-                      child: TextField(
-                        controller: _textController,
-                        style: TextStyle(color: AppTheme.textPrimary),
-                        decoration: InputDecoration(
-                          hintText: 'Scrivi un messaggio...',
-                          hintStyle: TextStyle(color: AppTheme.textSecondary),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          errorBorder: InputBorder.none,
-                          disabledBorder: InputBorder.none,
-                          filled: false,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, // Restored horizontal padding
-                            vertical: 12, // Restored vertical padding
-                          ),
-                        ),
-                        onSubmitted: (value) => _sendMessage(value),
-                        onChanged: (value) {
-                          // Enable/disable send button based on text
-                          setState(() {});
-                        },
-                        textInputAction: TextInputAction.send,
-                        keyboardType: TextInputType.multiline,
-                        maxLines: null,
-                        minLines: 1,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16), // Increased spacing
-                  GestureDetector(
-                    onTap: _textController.text.trim().isNotEmpty ? () => _sendMessage() : null,
-                    child: Container(
-                      width: 52, // Increased size
-                      height: 52, // Increased size
-                      decoration: BoxDecoration(
-                        color: _textController.text.trim().isNotEmpty 
-                            ? AppTheme.limeAccent 
-                            : AppTheme.limeAccent.withOpacity(0.3),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.send,
-                        color: _textController.text.trim().isNotEmpty 
-                            ? AppTheme.primaryDark 
-                            : AppTheme.textSecondary,
-                        size: 22, // Increased icon size
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _textController.dispose();
-    _scrollController.dispose();
-    _messagesSubscription?.cancel();
-    _refreshTimer?.cancel();
-    super.dispose();
-  }
-} 
+// Chat screen implementation moved to chat_screen.dart 

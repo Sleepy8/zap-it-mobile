@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/friends_service.dart';
 import '../theme.dart';
+import '../screens/user_profile_screen.dart';
 
 class AddFriendModal extends StatefulWidget {
   final FriendsService friendsService;
@@ -18,7 +19,8 @@ class _AddFriendModalState extends State<AddFriendModal> {
   final _searchController = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
-  bool _isLoading = false;
+  Set<String> _loadingUserIds = {}; // Track loading state per user
+  Map<String, String> _friendshipStatuses = {}; // Track friendship status per user
 
   @override
   void dispose() {
@@ -27,42 +29,62 @@ class _AddFriendModalState extends State<AddFriendModal> {
   }
 
   Future<void> _searchUsers(String query) async {
-    if (query.isEmpty) {
+    // Clear results if query is empty or too short
+    if (query.isEmpty || query.trim().length < 2) {
       setState(() {
         _searchResults = [];
         _isSearching = false;
+        _friendshipStatuses.clear();
       });
       return;
     }
+
+    // Prevent multiple rapid searches
+    if (_isSearching) return;
 
     setState(() {
       _isSearching = true;
     });
 
     try {
-      final results = await widget.friendsService.searchUsers(query);
+      // Use the new filtered search method that excludes blocked users
+      final results = await widget.friendsService.searchUsers(query.trim());
+      
+      // Check friendship status for each user (only for non-blocked users)
+      Map<String, String> statuses = {};
+      for (var user in results) {
+        final status = await widget.friendsService.getFriendshipStatus(user['id']);
+        statuses[user['id']] = status;
+      }
+      
       setState(() {
         _searchResults = results;
         _isSearching = false;
+        _friendshipStatuses = statuses;
       });
     } catch (e) {
       setState(() {
         _searchResults = [];
         _isSearching = false;
+        _friendshipStatuses.clear();
       });
     }
   }
 
   Future<void> _sendFriendRequest(String userId, String username) async {
     setState(() {
-      _isLoading = true;
+      _loadingUserIds.add(userId); // Add this user to loading set
     });
 
     try {
-      final success = await widget.friendsService.sendFriendRequest(userId);
-      if (success) {
+      final result = await widget.friendsService.sendFriendRequest(userId);
+      if (result['success']) {
         if (mounted) {
-          Navigator.pop(context);
+          // Update friendship status
+          setState(() {
+            _friendshipStatuses[userId] = 'pending';
+          });
+          
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Richiesta inviata a @$username!'),
@@ -73,8 +95,8 @@ class _AddFriendModalState extends State<AddFriendModal> {
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Errore nell\'invio della richiesta'),
+            SnackBar(
+              content: Text(result['error'] ?? 'Errore nell\'invio della richiesta'),
               backgroundColor: AppTheme.errorColor,
             ),
           );
@@ -92,10 +114,22 @@ class _AddFriendModalState extends State<AddFriendModal> {
     } finally {
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          _loadingUserIds.remove(userId); // Remove this user from loading set
         });
       }
     }
+  }
+
+  void _openUserProfile(Map<String, dynamic> user) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserProfileScreen(
+          userId: user['id'],
+          username: user['username'],
+        ),
+      ),
+    );
   }
 
   @override
@@ -150,13 +184,15 @@ class _AddFriendModalState extends State<AddFriendModal> {
                   child: TextField(
                     controller: _searchController,
                     style: const TextStyle(color: AppTheme.textPrimary),
-                    decoration: const InputDecoration(
-                      hintText: 'Cerca per @username...',
+                    decoration: InputDecoration(
+                      hintText: _searchController.text.isEmpty 
+                          ? 'Cerca per @username... (min. 2 caratteri, 50% del nickname)'
+                          : 'Cerca per @username...',
                       hintStyle: TextStyle(color: AppTheme.textSecondary),
                       border: InputBorder.none,
                     ),
                     onChanged: (value) {
-                      if (value.length >= 2) {
+                      if (value.trim().length >= 2) {
                         _searchUsers(value);
                       } else {
                         setState(() {
@@ -273,6 +309,9 @@ class _AddFriendModalState extends State<AddFriendModal> {
   }
 
   Widget _buildUserCard(Map<String, dynamic> user) {
+    final bool isLoading = _loadingUserIds.contains(user['id']);
+    final String friendshipStatus = _friendshipStatuses[user['id']] ?? 'none';
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -304,60 +343,112 @@ class _AddFriendModalState extends State<AddFriendModal> {
           
           // User info
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  user['name'] ?? 'Nome non disponibile',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '@${user['username'] ?? 'username'}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppTheme.limeAccent,
+            child: GestureDetector(
+              onTap: () => _openUserProfile(user),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user['name'] ?? 'Nome non disponibile',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppTheme.textPrimary,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    '@${user['username'] ?? 'username'}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.limeAccent,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           
-          // Add friend button
+          // Status indicator or Add button
           SizedBox(
             width: 70,
             height: 36,
-            child: ElevatedButton(
-              onPressed: _isLoading
-                  ? null
-                  : () => _sendFriendRequest(user['id'], user['username']),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.limeAccent,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryDark),
-                      ),
-                    )
-                  : const Text(
-                      'ADD',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                        color: AppTheme.primaryDark,
-                      ),
-                    ),
-            ),
+            child: _buildStatusWidget(user, friendshipStatus, isLoading),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildStatusWidget(Map<String, dynamic> user, String status, bool isLoading) {
+    switch (status) {
+      case 'accepted':
+        return Container(
+          decoration: BoxDecoration(
+            color: AppTheme.limeAccent.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: AppTheme.limeAccent.withOpacity(0.5),
+            ),
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.check,
+              color: AppTheme.limeAccent,
+              size: 16,
+            ),
+          ),
+        );
+      
+      case 'pending':
+        return Container(
+          decoration: BoxDecoration(
+            color: AppTheme.limeAccent.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: AppTheme.limeAccent.withOpacity(0.3),
+            ),
+          ),
+          child: const Center(
+            child: Text(
+              'PENDING',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.limeAccent,
+              ),
+            ),
+          ),
+        );
+      
+      case 'none':
+      default:
+        return ElevatedButton(
+          onPressed: isLoading
+              ? null
+              : () => _sendFriendRequest(user['id'], user['username']),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.limeAccent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          child: isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryDark),
+                  ),
+                )
+              : const Text(
+                  'ADD',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                    color: AppTheme.primaryDark,
+                  ),
+                ),
+        );
+    }
   }
 } 

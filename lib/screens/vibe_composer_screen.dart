@@ -17,9 +17,12 @@ class VibeComposerScreen extends StatefulWidget {
 class _VibeComposerScreenState extends State<VibeComposerScreen>
     with TickerProviderStateMixin {
   final VibrationPatternService _patternService = VibrationPatternService();
-  List<int> _currentPattern = [];
+  List<double> _currentPattern = [];
   List<int> _currentIntensities = []; // Nuovo: lista delle intensità
   List<int> _currentGaps = []; // Gap (ms) PRIMA di ogni segmento (il primo è il delay iniziale)
+  double _currentTouchIntensity = 0.5; // Intensità corrente del touch per la scala
+  double _visualizerHeight = 280.0; // Altezza reale del visualizer
+  final GlobalKey _visualizerKey = GlobalKey(); // Key per ottenere la posizione corretta del visualizer
   bool _isRecording = false;
   bool _isPlaying = false;
   late AnimationController _animationController;
@@ -175,111 +178,164 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
   }
 
   Widget _buildVisualizer(bool isSmallScreen) {
-    final visualizerHeight = isSmallScreen ? 160.0 : 220.0; // Aumentato significativamente
+    final visualizerHeight = isSmallScreen ? 320.0 : 400.0;
     
-    return Container(
-      height: visualizerHeight,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            AppTheme.surfaceDark.withOpacity(0.3),
-            AppTheme.surfaceDark.withOpacity(0.1),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppTheme.limeAccent.withOpacity(0.3),
-          width: 1,
-        ),
-      ),
-      child: Stack(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
         children: [
-          AnimatedBuilder(
-            animation: _animation,
-            builder: (context, child) {
-              return CustomPaint(
-                painter: WavePainter(
-                  pattern: _currentPattern,
-                  intensities: _currentIntensities,
-                  animation: _animation,
-                  isPlaying: _isPlaying,
-                  isSmallScreen: isSmallScreen,
-                ),
-                size: Size.infinite,
-              );
-            },
-          ),
-          // Area interattiva per la registrazione
-          if (_isRecording)
-            Positioned.fill(
-              child: GestureDetector(
-                onTapDown: _onVisualizerTapDown,
-                onTapUp: _onVisualizerTapUp,
-                onPanStart: _onVisualizerPanStart,
-                onPanUpdate: _onVisualizerPanUpdate,
-                onPanEnd: _onVisualizerPanEnd,
-                behavior: HitTestBehavior.opaque, // Importante: previene lo scroll
-                child: Container(
-                  color: Colors.transparent,
-                  child: Center(
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isSmallScreen ? 12 : 16, 
-                        vertical: isSmallScreen ? 6 : 8
+          Expanded(
+            child: Container(
+              key: _visualizerKey,
+              height: visualizerHeight,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  _visualizerHeight = constraints.maxHeight;
+                  return Container(
+                    height: visualizerHeight,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          AppTheme.surfaceDark.withOpacity(0.3),
+                          AppTheme.surfaceDark.withOpacity(0.1),
+                        ],
                       ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceDark.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppTheme.limeAccent.withOpacity(0.5),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        '🎙️ Tocca qui per registrare!\nTrascina per cambiare intensità',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: isSmallScreen ? 10 : 12,
-                        ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppTheme.limeAccent.withOpacity(0.3),
+                        width: 1,
                       ),
                     ),
-                  ),
-                ),
-              ),
-            )
-          else
-            Center(
-              child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isSmallScreen ? 12 : 16, 
-                  vertical: isSmallScreen ? 6 : 8
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceDark.withOpacity(0.8),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppTheme.limeAccent.withOpacity(0.5),
-                    width: 1,
-                  ),
-                ),
-                child: Text(
-                  _currentPattern.isEmpty 
-                    ? 'Crea il tuo pattern di vibrazione'
-                    : '${_currentPattern.length} impulsi creati',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: isSmallScreen ? 12 : 14,
-                  ),
-                ),
+                    child: Stack(
+                      children: [
+                        AnimatedBuilder(
+                          animation: _animation,
+                          builder: (context, child) {
+                            return CustomPaint(
+                              painter: WavePainter(
+                                pattern: _currentPattern,
+                                intensities: _currentIntensities,
+                                animation: _animation,
+                                isPlaying: _isPlaying,
+                                isSmallScreen: isSmallScreen,
+                              ),
+                              size: Size.infinite,
+                            );
+                          },
+                        ),
+                        // Area interattiva per la registrazione
+                        if (_isRecording)
+                          Positioned.fill(
+                            child: GestureDetector(
+                              onTapDown: _onVisualizerTapDown,
+                              onTapUp: _onVisualizerTapUp,
+                              onPanStart: _onVisualizerPanStart,
+                              onPanUpdate: _onVisualizerPanUpdate,
+                              onPanEnd: _onVisualizerPanEnd,
+                              behavior: HitTestBehavior.opaque,
+                              child: Container(
+                                color: Colors.transparent,
+                                child: Center(
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: isSmallScreen ? 12 : 16, 
+                                      vertical: isSmallScreen ? 6 : 8
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.surfaceDark.withOpacity(0.8),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: AppTheme.limeAccent.withOpacity(0.5),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '🎙️ Tocca qui per registrare!\nTrascina per cambiare intensità',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: AppTheme.textPrimary,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: isSmallScreen ? 10 : 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          Center(
+                            child: Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isSmallScreen ? 12 : 16, 
+                                vertical: isSmallScreen ? 6 : 8
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.surfaceDark.withOpacity(0.8),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: AppTheme.limeAccent.withOpacity(0.5),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                _currentPattern.isEmpty 
+                                  ? 'Crea il tuo pattern di vibrazione'
+                                  : '${_currentPattern.length} impulsi creati',
+                                style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: isSmallScreen ? 12 : 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
+          ),
+          const SizedBox(width: 8),
+          // Percentuali esterne alla griglia, allineate con ogni riga
+          SizedBox(
+            width: 40,
+            height: visualizerHeight,
+            child: _buildIntensityScale(),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildIntensityScale() {
+    return Column(
+      children: List.generate(11, (index) {
+        final percentage = 100 - (index * 10);
+        final isActive = _currentTouchIntensity >= (percentage / 100);
+        
+        // Calcola l'altezza per allineare con le righe della griglia (ridotto per evitare overflow)
+        final itemHeight = (_visualizerHeight / 10) * 0.9; // Ridotto del 10% per creare gap più piccolo
+        
+        return SizedBox(
+          height: itemHeight,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '$percentage%',
+              style: TextStyle(
+                color: isActive ? AppTheme.limeAccent : Colors.white.withOpacity(0.4),
+                fontSize: 8, // Ridotto per evitare overflow
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                letterSpacing: 0.0, // Rimosso il letter spacing
+              ),
+            ),
+          ),
+        );
+      }),
     );
   }
 
@@ -314,13 +370,13 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
             color: _isRecording ? AppTheme.buttonDanger : AppTheme.buttonWarning,
             isSmallScreen: isSmallScreen,
           ),
-          _buildSmallControlButton(
-            icon: Icons.add_rounded,
-            label: 'Create',
-            onPressed: _createManualPattern,
-            color: AppTheme.buttonAccent,
-            isSmallScreen: isSmallScreen,
-          ),
+                     _buildSmallControlButton(
+             icon: Icons.clear_rounded,
+             label: 'Clear',
+             onPressed: _clearPattern,
+             color: AppTheme.buttonDanger,
+             isSmallScreen: isSmallScreen,
+           ),
           _buildSmallControlButton(
             icon: Icons.save_rounded,
             label: 'Save',
@@ -382,7 +438,8 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
   void _onVisualizerTapDown(TapDownDetails details) {
     if (!_isRecording) return;
     
-    final renderBox = context.findRenderObject() as RenderBox;
+    final renderBox = _visualizerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
     final localPosition = renderBox.globalToLocal(details.globalPosition);
     
     _startInteractiveRecording(localPosition);
@@ -391,7 +448,8 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
   void _onVisualizerTapUp(TapUpDetails details) {
     if (!_isRecording) return;
     
-    final renderBox = context.findRenderObject() as RenderBox;
+    final renderBox = _visualizerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
     final localPosition = renderBox.globalToLocal(details.globalPosition);
     
     _stopInteractiveRecording(localPosition);
@@ -400,7 +458,8 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
   void _onVisualizerPanStart(DragStartDetails details) {
     if (!_isRecording) return;
     
-    final renderBox = context.findRenderObject() as RenderBox;
+    final renderBox = _visualizerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
     final localPosition = renderBox.globalToLocal(details.globalPosition);
     
     _startInteractiveRecording(localPosition);
@@ -409,7 +468,8 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
   void _onVisualizerPanUpdate(DragUpdateDetails details) {
     if (!_isRecording || _vibrationStartTime == null) return;
     
-    final renderBox = context.findRenderObject() as RenderBox;
+    final renderBox = _visualizerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
     final localPosition = renderBox.globalToLocal(details.globalPosition);
     
     // Aggiorna l'intensità in tempo reale durante il trascinamento - MIGLIORATA LA REATTIVITÀ
@@ -450,10 +510,15 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     });
     
     // Calcola l'intensità basata sulla posizione Y - MIGLIORATA LA SENSIBILITÀ
-    final intensity = _calculateIntensityFromPosition(position);
+    final intensity = _calculateIntensityFromPosition(position, visualizerHeight: _visualizerHeight);
     _lastIntensity = intensity;
     _segmentStartTime = DateTime.now();
     _segmentCurrentIntensity = intensity;
+    
+    // Aggiorna l'intensità corrente del touch per la scala
+    setState(() {
+      _currentTouchIntensity = intensity / 255.0;
+    });
     // Registra gap (off) PRIMA del segmento corrente
     final now = DateTime.now();
     int gapMs = 0;
@@ -497,8 +562,13 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
   }
 
   void _updateVibrationIntensity(Offset position) {
-    final intensity = _calculateIntensityFromPosition(position);
+    final intensity = _calculateIntensityFromPosition(position, visualizerHeight: _visualizerHeight);
     _lastIntensity = intensity;
+    
+    // Aggiorna l'intensità corrente del touch per la scala
+    setState(() {
+      _currentTouchIntensity = intensity / 255.0;
+    });
 
     // Split current segment if intensity changed enough and minimum time elapsed
     if (_segmentStartTime != null) {
@@ -510,7 +580,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
           if (_currentGaps.length == _currentPattern.length) {
             _currentGaps.add(10);
           }
-          _currentPattern.add(segmentDuration);
+          _currentPattern.add(segmentDuration.toDouble());
           _currentIntensities.add(_segmentCurrentIntensity);
           _segmentStartTime = DateTime.now();
           _segmentCurrentIntensity = intensity;
@@ -560,6 +630,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
   void _stopInteractiveRecording(Offset? position) {
     setState(() {
       _isVibrating = false;
+      _currentTouchIntensity = 0.5; // Reset dell'intensità del touch
     });
     _vibrationTimer?.cancel();
     _vibrationTimer = null;
@@ -570,7 +641,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
       final duration = elapsed.clamp(5, 6000);
       if (duration >= 5) {
         setState(() {
-          _currentPattern.add(duration);
+          _currentPattern.add(duration.toDouble());
           _currentIntensities.add(_segmentCurrentIntensity);
         });
       }
@@ -581,29 +652,18 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     _lastReleaseTime = DateTime.now();
   }
 
-  int _calculateIntensityFromPosition(Offset position) {
-    // Ottieni l'altezza del visualizzatore in base alla dimensione dello schermo
-    final screenHeight = MediaQuery.of(context).size.height;
-    final isSmallScreen = screenHeight < 700;
-    final visualizerHeight = isSmallScreen ? 160.0 : 220.0;
+  int _calculateIntensityFromPosition(Offset position, {double? visualizerHeight}) {
+    // Usa l'altezza del visualizer passata come parametro
+    final height = visualizerHeight ?? _visualizerHeight;
     
-    // Normalizza la posizione Y (0 = alto/soft, 1 = basso/hard)
-    final normalizedY = position.dy / visualizerHeight;
+    // Normalizza la posizione Y (0 = alto, 1 = basso)
+    final normalizedY = (position.dy / height).clamp(0.0, 1.0);
     
-    // Inverti la scala (0 = soft, 1 = hard) - AUMENTATA DRASTICAMENTE LA CURVA DI INTENSITÀ
+    // INVERTITO: 100% = top (hard), 0% = bottom (soft)
     final intensity = (1.0 - normalizedY).clamp(0.0, 1.0);
     
-    // Converti in valore per Vibration API (1-255) - AUMENTATA DRASTICAMENTE L'INTENSITÀ BASE
-    final baseIntensity = (intensity * 255).round();
-    
-    // Applica una curva molto più aggressiva per intensità più alte
-    if (baseIntensity > 128) {
-      return (baseIntensity * 1.8).round().clamp(0, 255); // Aumenta dell'80% per intensità alte
-    } else if (baseIntensity > 64) {
-      return (baseIntensity * 1.4).round().clamp(0, 255); // Aumenta del 40% per intensità medie
-    } else {
-      return (baseIntensity * 1.2).round().clamp(0, 255); // Aumenta del 20% anche per intensità basse
-    }
+    // Converti in valore per Vibration API (1-255)
+    return (intensity * 255).round().clamp(0, 255);
   }
 
   Widget _buildControlButton({
@@ -743,11 +803,9 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
                     IconButton(
                       onPressed: () => _playPattern(
                         pattern.pattern,
-                        // se non ci sono intensità salvate, usa valori alti di default
-                        (pattern.intensities != null && pattern.intensities!.isNotEmpty)
-                            ? pattern.intensities
-                            : List<int>.filled(pattern.pattern.length, 220),
-                        pattern.gaps,
+                        // Converti il pattern double in millisecondi e usa intensità di default
+                        List<int>.filled(pattern.pattern.length, 220),
+                        _synthesizeGaps(pattern.pattern.length),
                       ),
                       icon: Icon(
                         Icons.play_arrow_rounded,
@@ -783,7 +841,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     );
   }
 
-  void _playPattern([List<int>? pattern, List<int>? intensities, List<int>? gaps]) async {
+  void _playPattern([List<double>? pattern, List<int>? intensities, List<int>? gaps]) async {
     final patternToPlay = pattern ?? _currentPattern;
     final intensitiesToPlay = intensities ?? (
       _currentIntensities.length == patternToPlay.length
@@ -820,7 +878,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
           fullIntensities.add(0);
 
           for (int i = 0; i < patternToPlay.length; i++) {
-            final rawDuration = patternToPlay[i];
+            final rawDuration = patternToPlay[i].round();
             final onDuration = rawDuration.clamp(5, 6000); // durata precisa
             fullPattern.add(onDuration);
 
@@ -886,7 +944,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
           }
           
           // Attendi la durata dell'impulso
-          await Future.delayed(Duration(milliseconds: patternToPlay[i]));
+          await Future.delayed(Duration(milliseconds: patternToPlay[i].round()));
         }
       }
     } catch (e) {
@@ -899,7 +957,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     totalMs = 0;
     if (gapsToPlay.isNotEmpty) totalMs += gapsToPlay.first.clamp(0, 10000);
     for (int i = 0; i < patternToPlay.length; i++) {
-      totalMs += patternToPlay[i].clamp(5, 6000);
+      totalMs += patternToPlay[i].round();
       if (i + 1 < gapsToPlay.length) totalMs += gapsToPlay[i + 1].clamp(0, 10000);
     }
     Future.delayed(Duration(milliseconds: totalMs), () {
@@ -992,30 +1050,39 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
             onPressed: () => Navigator.pop(context),
             child: Text('Annulla', style: TextStyle(color: AppTheme.textSecondary)),
           ),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.isNotEmpty) {
-                _savePattern(nameController.text);
-                Navigator.pop(context);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.limeAccent,
-            ),
-            child: const Text('Salva'),
-          ),
+                     ElevatedButton(
+             onPressed: () {
+               if (nameController.text.isNotEmpty) {
+                 _savePattern(nameController.text);
+                 Navigator.pop(context);
+               }
+             },
+             style: ElevatedButton.styleFrom(
+               backgroundColor: AppTheme.limeAccent,
+             ),
+             child: const Text(
+               'Salva',
+               style: TextStyle(
+                 color: Colors.white,
+                 fontWeight: FontWeight.w600,
+               ),
+             ),
+           ),
         ],
       ),
     );
   }
 
   void _savePattern(String name) async {
+    // Converti il pattern corrente in formato double (0.0-1.0)
+    final normalizedPattern = _currentPattern.map((duration) => 
+      (duration / 1000.0).clamp(0.0, 1.0) // Normalizza a 0.0-1.0 range
+    ).toList();
+    
     final pattern = VibrationPattern(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
-      pattern: List.from(_currentPattern),
-      intensities: List.from(_currentIntensities),
-      gaps: List.from(_currentGaps),
+      pattern: normalizedPattern,
       color: '#${AppTheme.limeAccent.value.toRadixString(16).substring(2)}',
       createdAt: DateTime.now(),
     );
@@ -1033,13 +1100,12 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
 
   void _loadPattern(VibrationPattern pattern) {
     setState(() {
-      _currentPattern = List.from(pattern.pattern);
-      _currentIntensities = pattern.intensities != null && pattern.intensities!.isNotEmpty
-          ? List.from(pattern.intensities!)
-          : List<int>.filled(pattern.pattern.length, 220);
-      _currentGaps = pattern.gaps != null && pattern.gaps!.isNotEmpty
-          ? List.from(pattern.gaps!)
-          : _synthesizeGaps(_currentPattern.length);
+      // Converti il pattern double (0.0-1.0) in millisecondi
+      _currentPattern = pattern.pattern.map((value) => 
+        (value * 1000.0).round().toDouble() // Converti in millisecondi
+      ).toList();
+      _currentIntensities = List<int>.filled(pattern.pattern.length, 220);
+      _currentGaps = _synthesizeGaps(_currentPattern.length);
       _selectedPattern = pattern;
     });
 
@@ -1108,7 +1174,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
                         try {
                           final values = text.split(',').map((e) => int.parse(e.trim())).toList();
                           setState(() {
-                            _currentPattern = values;
+                            _currentPattern = values.map((e) => e.toDouble()).toList(); // Mantieni come double
                             _currentIntensities = List<int>.filled(values.length, 220);
                             _currentGaps = _synthesizeGaps(values.length);
                           });
@@ -1159,7 +1225,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
 }
 
 class WavePainter extends CustomPainter {
-  final List<int> pattern;
+  final List<double> pattern;
   final List<int> intensities; // Nuovo: lista delle intensità
   final Animation<double> animation;
   final bool isPlaying;
@@ -1175,6 +1241,57 @@ class WavePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Disegna il bordo smussato della griglia
+    final borderPaint = Paint()
+      ..color = Colors.white.withOpacity(0.15) // Bordo grigio più visibile
+      ..strokeWidth = 2.0 // Bordo più spesso
+      ..style = PaintingStyle.stroke;
+    
+    // Disegna il rettangolo con bordi smussati
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      const Radius.circular(20), // Stesso raggio del container
+    );
+    canvas.drawRRect(rect, borderPaint);
+    
+    // Grid più visibile e dettagliata
+    final gridPaint = Paint()
+      ..color = Colors.white.withOpacity(0.08) // Aumentata l'opacità per maggiore visibilità
+      ..strokeWidth = 0.8 // Aumentato lo spessore delle linee
+      ..style = PaintingStyle.stroke;
+
+         // Linee orizzontali ogni 10% con bordi smussati
+     for (int i = 0; i <= 10; i++) {
+       final y = (size.height / 10) * i;
+       final isMainLine = i % 2 == 0; // Linee principali ogni 20%
+       
+       // Disegna linee orizzontali con bordi smussati
+       final path = Path();
+       path.moveTo(10, y); // Inizia con un margine per il bordo smussato
+       path.lineTo(size.width - 10, y); // Termina con un margine per il bordo smussato
+       
+       canvas.drawPath(
+         path,
+         gridPaint..strokeWidth = isMainLine ? 1.2 : 0.6,
+       );
+     }
+
+     // Linee verticali per una griglia completa con bordi smussati
+     for (int i = 0; i <= 10; i++) {
+       final x = (size.width / 10) * i;
+       final isMainLine = i % 2 == 0; // Linee principali ogni 20%
+       
+       // Disegna linee verticali con bordi smussati
+       final path = Path();
+       path.moveTo(x, 10); // Inizia con un margine per il bordo smussato
+       path.lineTo(x, size.height - 10); // Termina con un margine per il bordo smussato
+       
+       canvas.drawPath(
+         path,
+         gridPaint..strokeWidth = isMainLine ? 1.2 : 0.6,
+       );
+     }
+
     final paint = Paint()
       ..color = AppTheme.limeAccent.withOpacity(0.7)
       ..style = PaintingStyle.fill;

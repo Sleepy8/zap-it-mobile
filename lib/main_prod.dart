@@ -19,15 +19,12 @@ import 'services/background_service.dart';
 import 'services/auth_service.dart';
 import 'widgets/animated_logo.dart';
 import 'services/notification_service.dart';
-import 'debug_helper.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Production mode - minimal logging
-  if (kDebugMode) {
-    DebugHelper.log('App starting in production mode');
-  }
   
   try {
     // Initialize Firebase with error handling
@@ -37,11 +34,7 @@ void main() async {
     await _initializeServices();
     
   } catch (e) {
-    // In production, log errors but don't show debug info
-    if (kDebugMode) {
-      DebugHelper.logError('Critical initialization error', e);
-    }
-    // Continue with app even if services fail
+    // In production, continue with app even if services fail
   }
   
   runApp(const ZapItApp());
@@ -51,26 +44,14 @@ Future<void> _initializeServices() async {
   // Initialize push notifications with better error handling
   try {
     await NotificationService().initializePushNotifications();
-    if (kDebugMode) {
-      DebugHelper.log('Notification service initialized');
-    }
   } catch (e) {
-    if (kDebugMode) {
-      DebugHelper.logError('Notification service initialization failed', e);
-    }
     // Don't crash the app if notifications fail
   }
 
   // Start background service with better error handling
   try {
     await BackgroundService().start();
-    if (kDebugMode) {
-      DebugHelper.log('Background service started');
-    }
   } catch (e) {
-    if (kDebugMode) {
-      DebugHelper.logError('Background service initialization failed', e);
-    }
     // Don't crash the app if background service fails
   }
 }
@@ -156,9 +137,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         
         // Handle error state
         if (snapshot.hasError) {
-          if (kDebugMode) {
-            DebugHelper.logError('Auth stream error', snapshot.error);
-          }
           // Show login screen on error
           return const LoginScreen();
         }

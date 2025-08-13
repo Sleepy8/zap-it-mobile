@@ -61,6 +61,10 @@ android {
     packagingOptions {
         pickFirst '**/libc++_shared.so'
         pickFirst '**/libjsc.so'
+        pickFirst '**/androidx/browser/R$color.class'
+        pickFirst '**/androidx/browser/R$*.class'
+        pickFirst '**/androidx/core/R$*.class'
+        pickFirst '**/androidx/annotation/R$*.class'
         exclude 'META-INF/DEPENDENCIES'
         exclude 'META-INF/LICENSE'
         exclude 'META-INF/LICENSE.txt'
@@ -79,13 +83,16 @@ flutter {
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+    implementation platform('com.google.firebase:firebase-bom:32.8.0')
     implementation 'com.google.firebase:firebase-analytics'
     implementation 'org.jetbrains.kotlinx:kotlinx-metadata-jvm:0.8.0'
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
     
-    // Exclude duplicate androidx.annotation.experimental.R classes
+    // Exclude duplicate androidx classes
     configurations.all {
         exclude group: 'androidx.annotation', module: 'annotation-experimental'
+        resolutionStrategy {
+            force 'androidx.browser:browser:1.7.0'
+        }
     }
 } 

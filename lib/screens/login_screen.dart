@@ -73,100 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // DEV: Quick login functions (REMOVE BEFORE PRODUCTION)
-  Future<void> _quickLoginMario() async {
-    setState(() {
-      _isLoading = true;
-    });
 
-    try {
-      // Auto-fill the form
-      _emailController.text = 'mariorossi@gmail.com';
-      _passwordController.text = 'Prova123';
-      
-      final success = await _authService.login(
-        'mariorossi@gmail.com',
-        'Prova123',
-      );
-      
-      if (success && mounted) {
-        // Forza la navigazione manualmente
-        
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MainScreen()),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ Login rapido Mario fallito'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Errore Mario: ${e.toString()}'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _quickLoginFrancesco() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      // Auto-fill the form
-      _emailController.text = 'congiustafrancesco@gmail.com';
-      _passwordController.text = 'Prova123';
-      
-      final success = await _authService.login(
-        'congiustafrancesco@gmail.com',
-        'Prova123',
-      );
-      
-      if (success && mounted) {
-        // Forza la navigazione manualmente
-        
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MainScreen()),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ Login rapido Francesco fallito'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Errore Francesco: ${e.toString()}'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -298,71 +205,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(
                             color: AppTheme.limeAccent,
                             fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.underline,
                           ),
                         ),
                       ),
                     ],
-                  ),
-                  
-                  // DEV: Quick login buttons (REMOVE BEFORE PRODUCTION)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          '🚀 DEV MODE',
-                          style: TextStyle(
-                            color: Colors.orange,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: _quickLoginMario,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orange,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                ),
-                                child: const Text(
-                                  'Mario',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: _quickLoginFrancesco,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                ),
-                                child: const Text(
-                                  'Francesco',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),

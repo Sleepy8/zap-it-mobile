@@ -47,13 +47,7 @@ Future<void> initializeFirebase() async {
       developer.log('Firebase initialized successfully for other platforms', name: 'Firebase');
     }
     
-    // Test Firebase Auth
-    try {
-      final auth = FirebaseAuth.instance;
-      developer.log('Firebase Auth instance created successfully', name: 'Firebase');
-    } catch (e) {
-      developer.log('Firebase Auth test failed: $e', name: 'Firebase');
-    }
+
     
   } catch (e) {
     developer.log('Firebase initialization failed: $e', name: 'Firebase');

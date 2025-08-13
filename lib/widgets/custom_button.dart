@@ -7,6 +7,8 @@ class CustomButton extends StatefulWidget {
   final bool isLoading;
   final double? width;
   final double? height;
+  final Color? backgroundColor;
+  final Color? textColor;
 
   const CustomButton({
     Key? key,
@@ -15,6 +17,8 @@ class CustomButton extends StatefulWidget {
     this.isLoading = false,
     this.width,
     this.height,
+    this.backgroundColor,
+    this.textColor,
   }) : super(key: key);
 
   @override
@@ -66,7 +70,7 @@ class _CustomButtonState extends State<CustomButton>
                 widget.onPressed?.call();
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.limeAccent,
+                backgroundColor: widget.backgroundColor ?? AppTheme.limeAccent,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
                   vertical: 16,
@@ -79,33 +83,34 @@ class _CustomButtonState extends State<CustomButton>
               ).copyWith(
                 backgroundColor: MaterialStateProperty.resolveWith<Color>(
                   (states) {
+                    final baseColor = widget.backgroundColor ?? AppTheme.limeAccent;
                     if (states.contains(MaterialState.pressed)) {
-                      return AppTheme.limeAccent.withOpacity(0.8);
+                      return baseColor.withOpacity(0.8);
                     }
                     if (states.contains(MaterialState.disabled)) {
-                      return AppTheme.limeAccent.withOpacity(0.5);
+                      return baseColor.withOpacity(0.5);
                     }
-                    return AppTheme.limeAccent;
+                    return baseColor;
                   },
                 ),
               ),
               child: widget.isLoading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          AppTheme.primaryDark,
+                          widget.textColor ?? AppTheme.primaryDark,
                         ),
                       ),
                     )
                   : Text(
                       widget.text,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.primaryDark,
+                        color: widget.textColor ?? AppTheme.primaryDark,
                       ),
                     ),
             ),

@@ -3,7 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme.dart';
 import '../services/messages_service.dart';
+import '../services/friends_service.dart';
+import '../widgets/online_status_indicator.dart';
 import 'messages_screen.dart';
+import 'chat_screen.dart';
 import 'privacy_settings_screen.dart';
 import 'notification_settings_screen.dart';
 import 'edit_profile_screen.dart';
@@ -25,11 +28,16 @@ class UserProfileScreen extends StatefulWidget {
 class _UserProfileScreenState extends State<UserProfileScreen> {
   Map<String, dynamic>? _userData;
   bool _isLoading = true;
+  String _friendshipStatus = 'none';
+  bool _isBlocked = false;
+  final _friendsService = FriendsService();
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _checkFriendshipStatus();
+    _checkBlockStatus();
   }
 
   Future<void> _loadUserData() async {
@@ -56,6 +64,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _checkFriendshipStatus() async {
+    final status = await _friendsService.getFriendshipStatus(widget.userId);
+    setState(() {
+      _friendshipStatus = status;
+    });
+  }
+
+  Future<void> _checkBlockStatus() async {
+    final isBlocked = await _friendsService.isUserBlocked(widget.userId);
+    setState(() {
+      _isBlocked = isBlocked;
+    });
   }
 
   @override
@@ -136,13 +158,85 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            Text(
-                              '@${widget.username}',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textPrimary,
-                              ),
+                            Column(
+                              children: [
+                                Text(
+                                  '@${widget.username}',
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    OnlineStatusIndicator(
+                                      userId: widget.userId,
+                                      size: 10,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    StreamBuilder<DocumentSnapshot>(
+                                      stream: FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(widget.userId)
+                                          .snapshots(),
+                                      builder: (context, snapshot) {
+                                        if (!snapshot.hasData) return const SizedBox.shrink();
+                                        
+                                        final userData = snapshot.data!.data() as Map<String, dynamic>?;
+                                        if (userData == null) return const SizedBox.shrink();
+                                        
+                                        final showOnlineStatus = userData['showOnlineStatus'] ?? true;
+                                        final showLastSeen = userData['showLastSeen'] ?? true;
+                                        
+                                        if (!showOnlineStatus && !showLastSeen) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        
+                                        final isOnline = userData['isOnline'] ?? false;
+                                        final lastSeen = userData['lastSeen'] as Timestamp?;
+                                        
+                                        if (isOnline && showOnlineStatus) {
+                                          return Text(
+                                            'Online',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: AppTheme.limeAccent,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          );
+                                        } else if (lastSeen != null && showLastSeen) {
+                                          final now = DateTime.now();
+                                          final difference = now.difference(lastSeen.toDate());
+                                          
+                                          String statusText;
+                                          if (difference.inMinutes < 1) {
+                                            statusText = 'Ultimo accesso: ora';
+                                          } else if (difference.inMinutes < 60) {
+                                            statusText = 'Ultimo accesso: ${difference.inMinutes}m fa';
+                                          } else if (difference.inHours < 24) {
+                                            statusText = 'Ultimo accesso: ${difference.inHours}h fa';
+                                          } else {
+                                            statusText = 'Ultimo accesso: ${difference.inDays}g fa';
+                                          }
+                                          
+                                          return Text(
+                                            statusText,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: AppTheme.textSecondary,
+                                            ),
+                                          );
+                                        }
+                                        
+                                        return const SizedBox.shrink();
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                             if (_userData!['name'] != null)
                               Text(
@@ -365,10 +459,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           MaterialPageRoute(
             builder: (context) => ChatScreen(
               conversationId: conversationId,
-              otherUser: {
-                'id': widget.userId,
-                'username': widget.username,
-              },
+              otherUserId: widget.userId,
+              otherUsername: widget.username,
             ),
           ),
         );
@@ -388,6 +480,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ),
       );
     }
+  }
+
+  void _sendZap() {
+    // TODO: Implement ZAP sending
+    // RIMOSSO: feedback locale duplicato
   }
 
   void _showProfileOptions() {
@@ -462,50 +559,87 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               const Divider(color: AppTheme.textSecondary),
             ],
             
-            // Opzioni per tutti i profili
-            ListTile(
-              leading: const Icon(
-                Icons.chat_bubble_outline,
-                color: AppTheme.limeAccent,
-              ),
-              title: Text(
-                'Inizia Chat',
-                style: TextStyle(color: AppTheme.textPrimary),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _startChat();
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.send,
-                color: AppTheme.limeAccent,
-              ),
-              title: Text(
-                'Invia ZAP',
-                style: TextStyle(color: AppTheme.textPrimary),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _sendZap();
-              },
-            ),
-            if (!isOwnProfile) ...[
+            // Opzioni per tutti i profili (se non bloccato)
+            if (!_isBlocked) ...[
               ListTile(
                 leading: const Icon(
-                  Icons.block,
-                  color: AppTheme.errorColor,
+                  Icons.chat_bubble_outline,
+                  color: AppTheme.limeAccent,
                 ),
                 title: Text(
-                  'Blocca Utente',
-                  style: TextStyle(color: AppTheme.errorColor),
+                  'Inizia Chat',
+                  style: TextStyle(color: AppTheme.textPrimary),
                 ),
                 onTap: () {
                   Navigator.pop(context);
-                  _showBlockConfirmation();
+                  _startChat();
                 },
               ),
+              ListTile(
+                leading: const Icon(
+                  Icons.send,
+                  color: AppTheme.limeAccent,
+                ),
+                title: Text(
+                  'Invia ZAP',
+                  style: TextStyle(color: AppTheme.textPrimary),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _sendZap();
+                },
+              ),
+            ],
+            
+            // Opzioni per profili di altri utenti
+            if (!isOwnProfile) ...[
+              if (_friendshipStatus == 'accepted') ...[
+                ListTile(
+                  leading: const Icon(
+                    Icons.person_remove,
+                    color: AppTheme.errorColor,
+                  ),
+                  title: Text(
+                    'Rimuovi Amico',
+                    style: TextStyle(color: AppTheme.errorColor),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showRemoveFriendConfirmation();
+                  },
+                ),
+              ],
+              if (!_isBlocked) ...[
+                ListTile(
+                  leading: const Icon(
+                    Icons.block,
+                    color: AppTheme.errorColor,
+                  ),
+                  title: Text(
+                    'Blocca Utente',
+                    style: TextStyle(color: AppTheme.errorColor),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showBlockConfirmation();
+                  },
+                ),
+              ] else ...[
+                ListTile(
+                  leading: const Icon(
+                    Icons.block,
+                    color: AppTheme.limeAccent,
+                  ),
+                  title: Text(
+                    'Sblocca Utente',
+                    style: TextStyle(color: AppTheme.limeAccent),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showUnblockConfirmation();
+                  },
+                ),
+              ],
               ListTile(
                 leading: const Icon(
                   Icons.report,
@@ -527,9 +661,43 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
-  void _sendZap() {
-    // TODO: Implement ZAP sending
-    // RIMOSSO: feedback locale duplicato
+  void _showRemoveFriendConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          'Rimuovi @${widget.username}?',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          'Sei sicuro di voler rimuovere @${widget.username} dai tuoi amici?',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Annulla',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _removeFriend();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+            ),
+            child: const Text('Rimuovi'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showBlockConfirmation() {
@@ -545,7 +713,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           style: TextStyle(color: AppTheme.textPrimary),
         ),
         content: Text(
-          'Non potrai più vedere questo utente o ricevere messaggi da lui.',
+          'Non potrai più vedere questo utente o ricevere messaggi da lui. Verrà anche rimosso dai tuoi amici.',
           style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
@@ -559,25 +727,151 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              // TODO: Implement block user
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('@${widget.username} bloccato'),
-                  backgroundColor: AppTheme.limeAccent,
-                ),
-              );
+              _blockUser();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.errorColor,
             ),
-            child: const Text(
-              'Blocca',
-              style: TextStyle(color: Colors.white),
-            ),
+            child: const Text('Blocca'),
           ),
         ],
       ),
     );
+  }
+
+  void _showUnblockConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          'Sblocca @${widget.username}?',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          'Vuoi davvero sbloccare @${widget.username}?',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Annulla',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _unblockUser();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.limeAccent,
+            ),
+            child: const Text('Sblocca'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _removeFriend() async {
+    try {
+      final success = await _friendsService.removeFriendship(widget.userId);
+      if (success) {
+        setState(() {
+          _friendshipStatus = 'none';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('@${widget.username} rimosso dagli amici'),
+            backgroundColor: AppTheme.limeAccent,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Errore nella rimozione dell\'amico'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Errore: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
+  }
+
+  Future<void> _blockUser() async {
+    try {
+      final success = await _friendsService.blockUser(widget.userId);
+      if (success) {
+        setState(() {
+          _isBlocked = true;
+          _friendshipStatus = 'none';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('@${widget.username} bloccato'),
+            backgroundColor: AppTheme.limeAccent,
+          ),
+        );
+        // Torna alla schermata precedente
+        Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Errore nel blocco dell\'utente'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Errore: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
+  }
+
+  Future<void> _unblockUser() async {
+    try {
+      final success = await _friendsService.unblockUser(widget.userId);
+      if (success) {
+        setState(() {
+          _isBlocked = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('@${widget.username} sbloccato'),
+            backgroundColor: AppTheme.limeAccent,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Errore nello sblocco dell\'utente'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Errore: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
   }
 
   void _showReportDialog() {

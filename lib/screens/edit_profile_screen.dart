@@ -54,7 +54,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         });
       }
     } catch (e) {
-      print('❌ Error loading user data: $e');
       setState(() {
         _isLoading = false;
       });
@@ -510,23 +509,41 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         color: AppTheme.surfaceDark,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppTheme.limeAccent.withOpacity(0.3),
+          color: enabled 
+              ? AppTheme.limeAccent.withOpacity(0.3)
+              : AppTheme.textSecondary.withOpacity(0.2),
+          width: 1,
         ),
       ),
-      child: TextFormField(
-        controller: controller,
-        enabled: enabled,
-        obscureText: isPassword,
-        maxLines: maxLines,
-        onChanged: onChanged,
-        validator: validator,
-        style: TextStyle(color: AppTheme.textPrimary),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: TextStyle(color: AppTheme.textSecondary),
-          prefixIcon: Icon(icon, color: AppTheme.limeAccent),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.all(16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: TextFormField(
+          controller: controller,
+          enabled: enabled,
+          obscureText: isPassword,
+          maxLines: maxLines,
+          onChanged: onChanged,
+          validator: validator,
+          style: TextStyle(
+            color: enabled ? AppTheme.textPrimary : AppTheme.textSecondary.withOpacity(0.5),
+          ),
+          decoration: InputDecoration(
+            labelText: label,
+            labelStyle: TextStyle(
+              color: enabled ? AppTheme.textSecondary : AppTheme.textSecondary.withOpacity(0.5),
+            ),
+            prefixIcon: Icon(
+              icon, 
+              color: enabled ? AppTheme.limeAccent : AppTheme.textSecondary.withOpacity(0.5),
+            ),
+            border: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            disabledBorder: InputBorder.none,
+            errorBorder: InputBorder.none,
+            focusedErrorBorder: InputBorder.none,
+            contentPadding: const EdgeInsets.all(16),
+          ),
         ),
       ),
     );

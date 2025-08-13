@@ -14,6 +14,11 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _nameKey = GlobalKey<FormFieldState>();
+  final _usernameKey = GlobalKey<FormFieldState>();
+  final _emailKey = GlobalKey<FormFieldState>();
+  final _passwordKey = GlobalKey<FormFieldState>();
+  final _confirmPasswordKey = GlobalKey<FormFieldState>();
   final _nameController = TextEditingController();
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -24,6 +29,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _usernameExists = false;
+  bool _isCheckingUsername = false;
+  bool _emailExists = false;
+  bool _isCheckingEmail = false;
+  bool _hasInteracted = false; // Track if user has interacted with form
+  bool _showAllErrors = false; // Track if we should show all validation errors
 
   @override
   void dispose() {
@@ -35,14 +46,106 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  Future<void> _register() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _checkUsername(String username) async {
+    if (username.length < 3) {
+      setState(() {
+        _usernameExists = false;
+        _isCheckingUsername = false;
+      });
+      return;
+    }
 
+    setState(() {
+      _isCheckingUsername = true;
+    });
+
+    try {
+      final usernameQuery = await _authService.checkUsernameExists(username);
+      setState(() {
+        _usernameExists = usernameQuery;
+        _isCheckingUsername = false;
+      });
+    } catch (e) {
+      setState(() {
+        _usernameExists = false;
+        _isCheckingUsername = false;
+      });
+    }
+  }
+
+  Future<void> _checkEmail(String email) async {
+    if (email.isEmpty || !RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
+      setState(() {
+        _emailExists = false;
+        _isCheckingEmail = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isCheckingEmail = true;
+    });
+
+    try {
+      final emailQuery = await _authService.checkEmailExists(email);
+      setState(() {
+        _emailExists = emailQuery;
+        _isCheckingEmail = false;
+      });
+    } catch (e) {
+      setState(() {
+        _emailExists = false;
+        _isCheckingEmail = false;
+      });
+    }
+  }
+
+  Future<void> _register() async {
+    // Set hasInteracted to true when user tries to register
+    _hasInteracted = true;
+    _showAllErrors = true; // Show all validation errors when registering
+    
+    if (!_formKey.currentState!.validate()) return;
+    
+    // Controllo finale prima della registrazione
     setState(() {
       _isLoading = true;
     });
 
     try {
+      // Controlla username
+      final usernameExists = await _authService.checkUsernameExists(_usernameController.text.trim());
+      if (usernameExists) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Username già in uso. Scegli un username diverso.'),
+            backgroundColor: AppTheme.errorColor,
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+
+      // Controlla email
+      final emailExists = await _authService.checkEmailExists(_emailController.text.trim());
+      if (emailExists) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Email già registrata. Usa un\'email diversa.'),
+            backgroundColor: AppTheme.errorColor,
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+
+      // Se arriviamo qui, username ed email sono disponibili
       final success = await _authService.register(
         _emailController.text.trim(),
         _passwordController.text,
@@ -62,8 +165,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Registrazione completata con successo!'),
+            content: Text('✅ Registrazione completata con successo!'),
             backgroundColor: AppTheme.limeAccent,
+            duration: Duration(seconds: 3),
           ),
         );
         // Forza la navigazione manualmente
@@ -81,10 +185,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String errorMessage = '❌ Errore durante la registrazione';
+        
+        // Handle specific error cases
+        if (e.toString().contains('Email già registrata')) {
+          errorMessage = '❌ Email già registrata. Usa un\'email diversa.';
+        } else if (e.toString().contains('Username già in uso')) {
+          errorMessage = '❌ Username già in uso (anche con maiuscole/minuscole diverse). Scegli un username diverso.';
+        } else if (e.toString().contains('weak-password')) {
+          errorMessage = '❌ La password deve essere di almeno 8 caratteri';
+        } else if (e.toString().contains('invalid-email')) {
+          errorMessage = '❌ Email non valida';
+        } else if (e.toString().contains('network')) {
+          errorMessage = '❌ Errore di connessione. Verifica la tua connessione internet.';
+        } else {
+          errorMessage = '❌ Errore: ${e.toString()}';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString()),
+            content: Text(errorMessage),
             backgroundColor: AppTheme.errorColor,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -149,6 +271,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   
                   // Name field
                   TextFormField(
+                    key: _nameKey,
                     controller: _nameController,
                     keyboardType: TextInputType.name,
                     textCapitalization: TextCapitalization.words,
@@ -156,7 +279,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       labelText: 'Nome completo',
                       prefixIcon: Icon(Icons.person_outlined),
                     ),
+                    onChanged: (value) {
+                      _hasInteracted = true;
+                      // Only validate this specific field
+                      _nameKey.currentState?.validate();
+                    },
                     validator: (value) {
+                      // Only show errors if user has interacted or we're showing all errors
+                      if (!_hasInteracted && !_showAllErrors) return null;
+                      
                       if (value == null || value.isEmpty) {
                         return 'Inserisci il tuo nome';
                       }
@@ -170,14 +301,53 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   
                   // Username field
                   TextFormField(
+                    key: _usernameKey,
                     controller: _usernameController,
                     keyboardType: TextInputType.text,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Username',
-                      prefixIcon: Icon(Icons.alternate_email),
+                      prefixIcon: const Icon(Icons.alternate_email),
                       hintText: 'es. mario_rossi',
+                      suffixIcon: _isCheckingUsername 
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : _usernameExists 
+                              ? const Icon(Icons.error, color: Colors.red)
+                              : null,
+                      errorText: _usernameExists ? 'Username già in uso' : null,
                     ),
+                    onChanged: (value) {
+                      _hasInteracted = true;
+                      // Reset username exists state when user starts typing
+                      if (_usernameExists) {
+                        setState(() {
+                          _usernameExists = false;
+                          _isCheckingUsername = false;
+                        });
+                      }
+                      if (value.length >= 3) {
+                        _checkUsername(value);
+                      } else {
+                        setState(() {
+                          _usernameExists = false;
+                          _isCheckingUsername = false;
+                        });
+                      }
+                      // Only validate this specific field
+                      _usernameKey.currentState?.validate();
+                    },
+                    onEditingComplete: () {
+                      if (_usernameController.text.length >= 3) {
+                        _checkUsername(_usernameController.text);
+                      }
+                    },
                     validator: (value) {
+                      // Only show errors if user has interacted or we're showing all errors
+                      if (!_hasInteracted && !_showAllErrors) return null;
+                      
                       if (value == null || value.isEmpty) {
                         return 'Inserisci un username';
                       }
@@ -187,6 +357,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(value)) {
                         return 'L\'username può contenere solo lettere, numeri e underscore';
                       }
+                      if (_usernameExists) {
+                        return 'Username già in uso';
+                      }
                       return null;
                     },
                   ),
@@ -194,19 +367,62 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   
                   // Email field
                   TextFormField(
+                    key: _emailKey,
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      suffixIcon: _isCheckingEmail 
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : _emailExists 
+                              ? const Icon(Icons.error, color: Colors.red)
+                              : null,
+                      errorText: _emailExists ? 'Email già registrata' : null,
                     ),
+                    onChanged: (value) {
+                      _hasInteracted = true;
+                      // Reset email exists state when user starts typing
+                      if (_emailExists) {
+                        setState(() {
+                          _emailExists = false;
+                          _isCheckingEmail = false;
+                        });
+                      }
+                      if (value.isNotEmpty && RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                        _checkEmail(value);
+                      } else {
+                        setState(() {
+                          _emailExists = false;
+                          _isCheckingEmail = false;
+                        });
+                      }
+                      // Only validate this specific field
+                      _emailKey.currentState?.validate();
+                    },
+                    onEditingComplete: () {
+                      if (_emailController.text.isNotEmpty && 
+                          RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(_emailController.text)) {
+                        _checkEmail(_emailController.text);
+                      }
+                    },
                     validator: (value) {
+                      // Only show errors if user has interacted or we're showing all errors
+                      if (!_hasInteracted && !_showAllErrors) return null;
+                      
                       if (value == null || value.isEmpty) {
                         return 'Inserisci la tua email';
                       }
                       if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
                           .hasMatch(value)) {
                         return 'Inserisci un\'email valida';
+                      }
+                      if (_emailExists) {
+                        return 'Email già registrata';
                       }
                       return null;
                     },
@@ -215,6 +431,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   
                   // Password field
                   TextFormField(
+                    key: _passwordKey,
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     decoration: InputDecoration(
@@ -233,7 +450,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
                     ),
+                    onChanged: (value) {
+                      _hasInteracted = true;
+                      // Only validate this specific field
+                      _passwordKey.currentState?.validate();
+                    },
                     validator: (value) {
+                      // Only show errors if user has interacted or we're showing all errors
+                      if (!_hasInteracted && !_showAllErrors) return null;
+                      
                       if (value == null || value.isEmpty) {
                         return 'Inserisci una password';
                       }
@@ -247,6 +472,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   
                   // Confirm Password field
                   TextFormField(
+                    key: _confirmPasswordKey,
                     controller: _confirmPasswordController,
                     obscureText: _obscureConfirmPassword,
                     decoration: InputDecoration(
@@ -265,7 +491,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
                     ),
+                    onChanged: (value) {
+                      _hasInteracted = true;
+                      // Only validate this specific field
+                      _confirmPasswordKey.currentState?.validate();
+                    },
                     validator: (value) {
+                      // Only show errors if user has interacted or we're showing all errors
+                      if (!_hasInteracted && !_showAllErrors) return null;
+                      
                       if (value == null || value.isEmpty) {
                         return 'Conferma la password';
                       }
@@ -336,7 +570,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           style: TextStyle(
                             color: AppTheme.limeAccent,
                             fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.underline,
                           ),
                         ),
                       ),

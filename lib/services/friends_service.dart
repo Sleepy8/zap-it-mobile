@@ -1,11 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'notification_service.dart';
 
 class FriendsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final NotificationService _notificationService = NotificationService();
 
   // Get current user ID
   String? get currentUserId => _auth.currentUser?.uid;
@@ -53,36 +51,114 @@ class FriendsService {
     });
   }
 
-  // Search users by username
+  // Search users by username (filtered to exclude blocked users and respect privacy settings)
   Future<List<Map<String, dynamic>>> searchUsers(String query) async {
-    if (query.isEmpty) return [];
+    if (query.isEmpty || query.length < 2) return [];
 
     try {
+      // Convert query to lowercase for case-insensitive search
+      final lowerQuery = query.toLowerCase().trim();
+      
+      // Get all users and filter client-side for better flexibility
       final querySnapshot = await _firestore
           .collection('users')
-          .where('username', isGreaterThanOrEqualTo: query)
-          .where('username', isLessThan: query + '\uf8ff')
-          .limit(10)
+          .limit(50) // Increased limit to allow for filtering
           .get();
 
-      return querySnapshot.docs
-          .map((doc) => {
-                'id': doc.id,
-                ...doc.data(),
-              })
-          .where((user) => user['id'] != currentUserId)
-          .toList();
-    } catch (e) {
+      List<Map<String, dynamic>> results = [];
       
+      for (var doc in querySnapshot.docs) {
+        final userData = doc.data() as Map<String, dynamic>?;
+        if (userData == null) continue; // Skip documents with null data
+        
+        final username = userData['username']?.toString().toLowerCase() ?? '';
+        
+        // Check if username contains the query and is not the current user
+        if (username.contains(lowerQuery) && doc.id != currentUserId) {
+          // Check if user account is active (not deleted)
+          final isAccountActive = userData['deleted'] != true;
+          
+          // Skip deleted accounts
+          if (!isAccountActive) continue;
+          
+          // Check if query is at least 50% of the username length
+          final minRequiredLength = (username.length * 0.5).ceil();
+          if (lowerQuery.length >= minRequiredLength) {
+            results.add({
+              'id': doc.id,
+              ...userData,
+            });
+          }
+        }
+      }
+
+      // Filter out blocked users, users who blocked current user, and users with private profiles
+      List<Map<String, dynamic>> filteredResults = [];
+      for (var user in results) {
+        final isBlocked = await isUserBlocked(user['id']);
+        final isBlockedBy = await isBlockedByUser(user['id']);
+        final showProfileToEveryone = user['showProfileToEveryone'] ?? true;
+        
+        // Additional privacy checks
+        final allowFriendRequests = user['allowFriendRequests'] ?? true;
+        final isAccountSuspended = user['suspended'] ?? false;
+        
+        if (!isBlocked && 
+            !isBlockedBy && 
+            showProfileToEveryone && 
+            allowFriendRequests && 
+            !isAccountSuspended) {
+          filteredResults.add(user);
+        }
+      }
+
+      // Sort results by relevance (exact matches first, then partial matches)
+      filteredResults.sort((a, b) {
+        final usernameA = (a['username'] ?? '').toString().toLowerCase();
+        final usernameB = (b['username'] ?? '').toString().toLowerCase();
+        
+        // Exact match gets priority
+        if (usernameA == lowerQuery && usernameB != lowerQuery) return -1;
+        if (usernameB == lowerQuery && usernameA != lowerQuery) return 1;
+        
+        // Then sort by username length (shorter usernames first)
+        if (usernameA.length != usernameB.length) {
+          return usernameA.length.compareTo(usernameB.length);
+        }
+        
+        // Finally, alphabetical order
+        return usernameA.compareTo(usernameB);
+      });
+
+      // Limit to 10 results
+      return filteredResults.take(10).toList();
+    } catch (e) {
       return [];
     }
   }
 
   // Send friend request
-  Future<bool> sendFriendRequest(String friendId) async {
-    if (currentUserId == null) return false;
+  Future<Map<String, dynamic>> sendFriendRequest(String friendId) async {
+    if (currentUserId == null) return {'success': false, 'error': 'Utente non autenticato'};
 
     try {
+      // Check if target user accepts friend requests
+      final targetUserDoc = await _firestore
+          .collection('users')
+          .doc(friendId)
+          .get();
+      
+      if (!targetUserDoc.exists) {
+        return {'success': false, 'error': 'Utente non trovato'};
+      }
+      
+      final targetUserData = targetUserDoc.data() as Map<String, dynamic>;
+      final allowFriendRequests = targetUserData['allowFriendRequests'] ?? true;
+      
+      if (!allowFriendRequests) {
+        return {'success': false, 'error': 'Questo utente non accetta richieste di amicizia'};
+      }
+
       // Check if friendship already exists
       final existingDoc = await _firestore
           .collection('friendships')
@@ -91,7 +167,7 @@ class FriendsService {
           .get();
 
       if (existingDoc.docs.isNotEmpty) {
-        return false; // Friendship already exists
+        return {'success': false, 'error': 'Richieste di amicizia già inviata'};
       }
 
       // Create friend request
@@ -102,10 +178,9 @@ class FriendsService {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      return true;
+      return {'success': true, 'error': null};
     } catch (e) {
-      
-      return false;
+      return {'success': false, 'error': 'Errore nell\'invio della richiesta'};
     }
   }
 
@@ -114,11 +189,32 @@ class FriendsService {
     if (currentUserId == null) return false;
 
     try {
+      // Get the friendship document to get the sender's ID
+      final friendshipDoc = await _firestore
+          .collection('friendships')
+          .doc(friendshipId)
+          .get();
+      
+      if (!friendshipDoc.exists) return false;
+      
+      final friendshipData = friendshipDoc.data()!;
+      final senderId = friendshipData['userId'];
+      
+      // Update the original friendship to accepted
       await _firestore
           .collection('friendships')
           .doc(friendshipId)
           .update({
         'status': 'accepted',
+        'acceptedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Create the reverse friendship (bidirectional)
+      await _firestore.collection('friendships').add({
+        'userId': currentUserId,
+        'friendId': senderId,
+        'status': 'accepted',
+        'createdAt': FieldValue.serverTimestamp(),
         'acceptedAt': FieldValue.serverTimestamp(),
       });
 
@@ -196,16 +292,11 @@ class FriendsService {
       }
 
       // Verify deletion by checking remaining friendships
-      final remainingFriendships = await _firestore
+      await _firestore
           .collection('friendships')
           .where('userId', isEqualTo: currentUserId)
           .where('status', isEqualTo: 'accepted')
           .get();
-
-      
-      for (var doc in remainingFriendships.docs) {
-        
-      }
 
       
       return true;
@@ -278,6 +369,167 @@ class FriendsService {
     }
   }
 
+  // Check friendship status between current user and another user
+  Future<String> getFriendshipStatus(String otherUserId) async {
+    if (currentUserId == null) return 'none';
+
+    try {
+      // Check if there's a friendship from current user to other user
+      final friendshipQuery = await _firestore
+          .collection('friendships')
+          .where('userId', isEqualTo: currentUserId)
+          .where('friendId', isEqualTo: otherUserId)
+          .get();
+
+      if (friendshipQuery.docs.isNotEmpty) {
+        final status = friendshipQuery.docs.first.data()['status'] as String;
+        return status; // 'accepted' or 'pending'
+      }
+
+      // Check if there's a friendship from other user to current user
+      final reverseFriendshipQuery = await _firestore
+          .collection('friendships')
+          .where('userId', isEqualTo: otherUserId)
+          .where('friendId', isEqualTo: currentUserId)
+          .get();
+
+      if (reverseFriendshipQuery.docs.isNotEmpty) {
+        final status = reverseFriendshipQuery.docs.first.data()['status'] as String;
+        return status; // 'accepted' or 'pending'
+      }
+
+      return 'none'; // No friendship exists
+    } catch (e) {
+      
+      return 'none';
+    }
+  }
+
+  // Block a user
+  Future<bool> blockUser(String userIdToBlock) async {
+    if (currentUserId == null) return false;
+
+    try {
+      // First, remove any existing friendship
+      await removeFriendship(userIdToBlock);
+
+      // Check if block already exists
+      final existingBlock = await _firestore
+          .collection('blocks')
+          .where('blockerId', isEqualTo: currentUserId)
+          .where('blockedId', isEqualTo: userIdToBlock)
+          .get();
+
+      if (existingBlock.docs.isNotEmpty) {
+        return true; // Already blocked
+      }
+
+      // Create block
+      await _firestore.collection('blocks').add({
+        'blockerId': currentUserId,
+        'blockedId': userIdToBlock,
+        'blockedAt': FieldValue.serverTimestamp(),
+      });
+
+      return true;
+    } catch (e) {
+      
+      return false;
+    }
+  }
+
+  // Unblock a user
+  Future<bool> unblockUser(String userIdToUnblock) async {
+    if (currentUserId == null) return false;
+
+    try {
+      final blockQuery = await _firestore
+          .collection('blocks')
+          .where('blockerId', isEqualTo: currentUserId)
+          .where('blockedId', isEqualTo: userIdToUnblock)
+          .get();
+
+      if (blockQuery.docs.isNotEmpty) {
+        for (var doc in blockQuery.docs) {
+          await doc.reference.delete();
+        }
+      }
+
+      return true;
+    } catch (e) {
+      
+      return false;
+    }
+  }
+
+  // Get list of blocked users
+  Stream<List<Map<String, dynamic>>> getBlockedUsers() {
+    if (currentUserId == null) return Stream.value([]);
+
+    return _firestore
+        .collection('blocks')
+        .where('blockerId', isEqualTo: currentUserId)
+        .snapshots()
+        .asyncMap((snapshot) async {
+      List<Map<String, dynamic>> blockedUsers = [];
+      
+      for (var doc in snapshot.docs) {
+        final blockedId = doc.data()['blockedId'];
+        final userData = await _firestore
+            .collection('users')
+            .doc(blockedId)
+            .get();
+        
+        if (userData.exists) {
+          blockedUsers.add({
+            'blockId': doc.id,
+            'id': blockedId,
+            'blockedAt': doc.data()['blockedAt'],
+            ...userData.data() as Map<String, dynamic>,
+          });
+        }
+      }
+      
+      return blockedUsers;
+    });
+  }
+
+  // Check if a user is blocked by current user
+  Future<bool> isUserBlocked(String userId) async {
+    if (currentUserId == null) return false;
+
+    try {
+      final blockQuery = await _firestore
+          .collection('blocks')
+          .where('blockerId', isEqualTo: currentUserId)
+          .where('blockedId', isEqualTo: userId)
+          .get();
+
+      return blockQuery.docs.isNotEmpty;
+    } catch (e) {
+      
+      return false;
+    }
+  }
+
+  // Check if current user is blocked by another user
+  Future<bool> isBlockedByUser(String userId) async {
+    if (currentUserId == null) return false;
+
+    try {
+      final blockQuery = await _firestore
+          .collection('blocks')
+          .where('blockerId', isEqualTo: userId)
+          .where('blockedId', isEqualTo: currentUserId)
+          .get();
+
+      return blockQuery.docs.isNotEmpty;
+    } catch (e) {
+      
+      return false;
+    }
+  }
+
   // Get leaderboard
   Future<List<Map<String, dynamic>>> getLeaderboard({String filter = 'zaps_sent'}) async {
     try {
@@ -305,6 +557,8 @@ class FriendsService {
           'zaps_sent': userData['zapsSent'] ?? 0,
           'zaps_received': userData['zapsReceived'] ?? 0,
           'streak': streak,
+          'dailyStreak': userData['dailyStreak'] ?? 0,
+          'dailyZaps': userData['dailyZaps'] ?? 0,
           'isCurrentUser': userId == currentUserId,
         });
       }
@@ -327,7 +581,23 @@ class FriendsService {
   // Calculate user streak (consecutive days with ZAPs)
   Future<int> _calculateStreak(String userId) async {
     try {
-      // Get all ZAPs sent by user in the last 30 days
+      // First, try to get the daily streak from user document
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        
+        // Check if user has a daily streak field
+        if (userData.containsKey('dailyStreak')) {
+          return userData['dailyStreak'] ?? 0;
+        }
+        
+        // Check if user has a daily zaps field
+        if (userData.containsKey('dailyZaps')) {
+          return userData['dailyZaps'] ?? 0;
+        }
+      }
+      
+      // Fallback: calculate streak from ZAPs sent in the last 30 days
       final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
       
       final zapsSnapshot = await _firestore
@@ -377,5 +647,132 @@ class FriendsService {
       
       return 0;
     }
+  }
+
+  // Get search suggestions for better user experience
+  Future<List<String>> getSearchSuggestions(String query) async {
+    if (query.isEmpty || query.length < 2) return [];
+
+    try {
+      final lowerQuery = query.toLowerCase().trim();
+      
+      // Get recent friends for suggestions
+      final friends = await getFriendsStream().first;
+      List<String> suggestions = [];
+      
+      for (var friend in friends) {
+        final username = friend['username']?.toString().toLowerCase() ?? '';
+        if (username.contains(lowerQuery)) {
+          suggestions.add(friend['username']);
+        }
+      }
+      
+      // Limit suggestions
+      return suggestions.take(5).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Enhanced search with additional filtering options
+  Future<List<Map<String, dynamic>>> searchUsersEnhanced(String query, {
+    bool includeFriends = true,
+  }) async {
+    if (query.isEmpty || query.length < 2) return [];
+
+    try {
+      final lowerQuery = query.toLowerCase().trim();
+      
+      // Get all users and filter client-side for better flexibility
+      final querySnapshot = await _firestore
+          .collection('users')
+          .limit(100) // Increased limit for enhanced search
+          .get();
+
+      List<Map<String, dynamic>> results = [];
+      
+      for (var doc in querySnapshot.docs) {
+        final userData = doc.data() as Map<String, dynamic>?;
+        if (userData == null) continue; // Skip documents with null data
+        
+        final username = userData['username']?.toString().toLowerCase() ?? '';
+        
+        // Check if username contains the query and is not the current user
+        if (username.contains(lowerQuery) && doc.id != currentUserId) {
+          // Check if user account is active (not deleted)
+          final isAccountActive = userData['deleted'] != true;
+          
+          // Skip deleted accounts
+          if (!isAccountActive) continue;
+          
+          // Check if query is at least 50% of the username length
+          final minRequiredLength = (username.length * 0.5).ceil();
+          if (lowerQuery.length >= minRequiredLength) {
+            results.add({
+              'id': doc.id,
+              ...userData,
+            });
+          }
+        }
+      }
+
+      // Filter out blocked users, users who blocked current user, and users with private profiles
+      List<Map<String, dynamic>> filteredResults = [];
+      for (var user in results) {
+        final isBlocked = await isUserBlocked(user['id']);
+        final isBlockedBy = await isBlockedByUser(user['id']);
+        final showProfileToEveryone = user['showProfileToEveryone'] ?? true;
+        
+        // Additional privacy checks
+        final allowFriendRequests = user['allowFriendRequests'] ?? true;
+        final isAccountSuspended = user['suspended'] ?? false;
+        
+        if (!isBlocked && 
+            !isBlockedBy && 
+            showProfileToEveryone && 
+            allowFriendRequests && 
+            !isAccountSuspended) {
+          filteredResults.add(user);
+        }
+      }
+
+      // Sort results by relevance
+      filteredResults.sort((a, b) {
+        final usernameA = (a['username'] ?? '').toString().toLowerCase();
+        final usernameB = (b['username'] ?? '').toString().toLowerCase();
+        
+        // Exact match gets priority
+        if (usernameA == lowerQuery && usernameB != lowerQuery) return -1;
+        if (usernameB == lowerQuery && usernameA != lowerQuery) return 1;
+        
+        // Friends get priority if includeFriends is true
+        if (includeFriends) {
+          final isFriendA = _isUserInFriendsList(a['id']);
+          final isFriendB = _isUserInFriendsList(b['id']);
+          if (isFriendA && !isFriendB) return -1;
+          if (isFriendB && !isFriendA) return 1;
+        }
+        
+        // Then sort by username length (shorter usernames first)
+        if (usernameA.length != usernameB.length) {
+          return usernameA.length.compareTo(usernameB.length);
+        }
+        
+        // Finally, alphabetical order
+        return usernameA.compareTo(usernameB);
+      });
+
+      return filteredResults.take(15).toList();
+    } catch (e) {
+      // Silent error handling
+      return [];
+    }
+  }
+
+  // Helper method to check if user is in friends list
+  bool _isUserInFriendsList(String userId) {
+    // This would need to be implemented with a cached friends list
+    // For now, return false as a placeholder
+    return false;
   }
 } 

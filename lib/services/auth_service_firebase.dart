@@ -1,15 +1,89 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'dart:async';
 
 class _FirebaseAuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  StreamSubscription<DocumentSnapshot>? _userListener;
 
   // Get current user
   User? get currentUser => _auth.currentUser;
 
   // Stream of auth changes
   Stream<User?> get authStateChanges => _auth.authStateChanges();
+
+  // Start listening for account deletion
+  void startAccountDeletionListener(BuildContext context) {
+    final user = _auth.currentUser;
+    if (user != null) {
+      _userListener = _firestore
+          .collection('users')
+          .doc(user.uid)
+          .snapshots()
+          .listen((snapshot) {
+        if (!snapshot.exists) {
+          // Account has been deleted, sign out user
+          _handleAccountDeletion(context);
+        }
+      });
+    }
+  }
+
+  // Stop listening for account deletion
+  void stopAccountDeletionListener() {
+    _userListener?.cancel();
+    _userListener = null;
+  }
+
+  // Handle account deletion
+  Future<void> _handleAccountDeletion(BuildContext context) async {
+    try {
+      // Sign out the user
+      await _auth.signOut();
+      
+      // Show notification to user
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Il tuo account è stato eliminato. Sei stato sloggato.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+          ),
+        );
+        
+        // Navigate to login screen
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/login',
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      // Handle error
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Errore durante il logout: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Check if account exists (for periodic checks)
+  Future<bool> checkAccountExists(String userId) async {
+    try {
+      DocumentSnapshot doc = await _firestore
+          .collection('users')
+          .doc(userId)
+          .get();
+      return doc.exists;
+    } catch (e) {
+      return false;
+    }
+  }
 
   // Sign in with email and password
   Future<UserCredential?> signInWithEmailAndPassword(
@@ -54,6 +128,7 @@ class _FirebaseAuthService {
 
   // Sign out
   Future<void> signOut() async {
+    stopAccountDeletionListener();
     await _auth.signOut();
   }
 
