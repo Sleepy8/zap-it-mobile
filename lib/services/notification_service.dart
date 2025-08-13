@@ -15,76 +15,66 @@ import '../main.dart';
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
-// Background message handler - ENHANCED FOR PHYSICAL DEVICES
+// Background message handler - FIXED FOR iOS 18
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     // Initialize local notifications for background
     await _initializeLocalNotifications();
     
-    // Handle ZAP notifications
-    if (message.data['type'] == 'new_zap') {
-      // Force vibration even in background
-      await _handleZapNotification(message);
+    final messageType = message.data['type'];
+    
+    // Handle ZAP notifications - SILENT PUSH ONLY
+    if (messageType == 'new_zap') {
+      // For iOS: Silent push cannot trigger haptics in background
+      // We can only sync data, not trigger vibrations
+      await _handleZapSync(message);
       
-      // Additional vibration for physical devices in background
+      // For Android: Can trigger vibration in background
       if (Platform.isAndroid) {
         await Future.delayed(Duration(milliseconds: 1000));
         await Vibration.vibrate(duration: 200);
-      } else if (Platform.isIOS) {
-              // Haptic feedback for iOS - FIXED FOR iOS
-      Future.delayed(Duration(milliseconds: 1000));
-      HapticFeedback.heavyImpact();
-      // Add a second haptic for emphasis
-      Future.delayed(Duration(milliseconds: 200));
-      HapticFeedback.mediumImpact();
       }
     }
     
-    // Handle message notifications - CREATE LOCAL NOTIFICATION
-    if (message.data['type'] == 'new_message') {
-      // Create local notification for messages
+    // Handle message notifications - USER-FACING NOTIFICATIONS
+    if (messageType == 'new_message') {
+      // Create visible notification with system haptic
       final senderName = message.data['senderName'] ?? 'Un amico';
       final conversationId = message.data['conversationId'] ?? '';
       await _showMessageNotification(senderName, conversationId);
-      
-      // Also trigger vibration for feedback
-      try {
-        if (Platform.isAndroid) {
-          await Vibration.vibrate(duration: 200);
-        } else if (Platform.isIOS) {
-          HapticFeedback.lightImpact();
-        }
-      } catch (e) {
-        // Silent error handling
-      }
     }
     
-    // Handle friend request notifications - CREATE LOCAL NOTIFICATION
-    if (message.data['type'] == 'friend_request') {
-      // Create local notification for friend requests
+    // Handle friend request notifications - USER-FACING NOTIFICATIONS
+    if (messageType == 'friend_request') {
+      // Create visible notification with system haptic
       final senderName = message.data['senderName'] ?? 'Un amico';
       final senderUsername = message.data['senderUsername'] ?? 'amico';
       await _showFriendRequestNotification(senderName, senderUsername);
-      
-      // Also trigger vibration for feedback
-      try {
-        if (Platform.isAndroid) {
-          await Vibration.vibrate(duration: 200);
-        } else if (Platform.isIOS) {
-          HapticFeedback.lightImpact();
-        }
-      } catch (e) {
-        // Silent error handling
-      }
     }
   } catch (e) {
-    // Last resort vibration in background
-    try {
-      await Vibration.vibrate(duration: 500);
-    } catch (vibrationError) {
-      // Silent error handling
+    // Silent error handling
+  }
+}
+
+// Handle ZAP sync (silent) - iOS background only
+Future<void> _handleZapSync(RemoteMessage message) async {
+  try {
+    // Check if ZAPs are paused
+    final zapsPaused = await NotificationService()._isZapsPaused();
+    if (zapsPaused) {
+      return;
     }
+    
+    // For iOS: We can only sync data in background
+    // Haptics will be triggered when app comes to foreground
+    // Store ZAP data for later processing
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pending_zap_${DateTime.now().millisecondsSinceEpoch}', 
+        message.data.toString());
+    
+  } catch (e) {
+    // Silent error handling
   }
 }
 

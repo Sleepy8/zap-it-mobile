@@ -25,14 +25,13 @@ import 'services/auth_service.dart';
 import 'widgets/animated_logo.dart';
 import 'services/notification_service.dart';
 import 'services/online_status_service.dart';
+import 'services/advanced_haptics_service.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
-  
-
   
   // Always try to initialize Firebase, but don't crash if it fails
   bool firebaseInitialized = false;
@@ -56,6 +55,14 @@ void main() async {
 }
 
 Future<void> _initializeServices() async {
+  // Initialize haptics service first
+  try {
+    final hapticsService = AdvancedHapticsService();
+    await hapticsService.initialize();
+  } catch (e) {
+    // Don't crash the app if haptics fail
+  }
+
   // Initialize push notifications with better error handling
   try {
     final notificationService = NotificationService();
@@ -80,11 +87,55 @@ Future<void> _initializeServices() async {
   }
 }
 
-class ZapItApp extends StatelessWidget {
+class ZapItApp extends StatefulWidget {
   const ZapItApp({Key? key}) : super(key: key);
 
   // Global navigator key for notification navigation
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  State<ZapItApp> createState() => _ZapItAppState();
+}
+
+class _ZapItAppState extends State<ZapItApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // Update haptics service with app state
+    final hapticsService = AdvancedHapticsService();
+    
+    switch (state) {
+      case AppLifecycleState.resumed:
+        // App is in foreground
+        hapticsService.setAppForegroundState(true);
+        // Play any pending haptics from background
+        hapticsService.playPendingHaptics();
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        // App is in background or inactive
+        hapticsService.setAppForegroundState(false);
+        break;
+      case AppLifecycleState.hidden:
+        // App is hidden (iOS specific)
+        hapticsService.setAppForegroundState(false);
+        break;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,7 +143,7 @@ class ZapItApp extends StatelessWidget {
       title: 'Zap It',
       theme: AppTheme.darkTheme,
       debugShowCheckedModeBanner: false,
-      navigatorKey: navigatorKey, // Add global navigator key
+      navigatorKey: widget.navigatorKey, // Add global navigator key
       home: const AuthWrapper(),
       builder: (context, child) {
         // Ensure proper scaling and prevent black screen issues

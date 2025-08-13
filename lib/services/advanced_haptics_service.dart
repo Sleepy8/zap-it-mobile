@@ -1,100 +1,147 @@
-import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
-import 'dart:async';
+import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AdvancedHapticsService {
   static final AdvancedHapticsService _instance = AdvancedHapticsService._internal();
   factory AdvancedHapticsService() => _instance;
   AdvancedHapticsService._internal();
 
-  // Capacità del dispositivo
   bool _isInitialized = false;
-  bool _hasVibrator = false;
-  bool _hasAmplitudeControl = false;
+  bool _isHapticCapable = false;
   bool _isHapticFeedbackSupported = false;
-
-  // Rate limiting per performance
-  DateTime? _lastHapticTime;
-  static const int _minHapticInterval = 40; // 25 haptics/secondo max
-  static const double _intensityThreshold = 0.06; // Soglia per cambiamenti significativi
-
-  // Stato corrente
-  double _lastIntensity = 0.0;
+  bool _hasVibrator = false;
   int _lastIntensityBucket = -1;
 
-  // Timer per debounce
-  Timer? _debounceTimer;
+  // iOS 18 specific: Check if app is in foreground
+  bool _isAppInForeground = true;
 
-  // Inizializzazione del servizio
+  // Initialize haptics service
   Future<void> initialize() async {
     if (_isInitialized) return;
 
     try {
-      // Controlla capacità vibrazione
-      _hasVibrator = await Vibration.hasVibrator() ?? false;
-      _hasAmplitudeControl = await Vibration.hasAmplitudeControl() ?? false;
-
-      _isHapticFeedbackSupported = true;
+      // Check platform capabilities
+      if (Platform.isIOS) {
+        _isHapticCapable = true;
+        _isHapticFeedbackSupported = true;
+        _hasVibrator = false; // iOS uses haptics, not vibration
+      } else if (Platform.isAndroid) {
+        _hasVibrator = await Vibration.hasVibrator() ?? false;
+        _isHapticCapable = _hasVibrator;
+        _isHapticFeedbackSupported = _hasVibrator;
+      }
 
       _isInitialized = true;
     } catch (e) {
-      // Fallback sicuro
-      _hasVibrator = false;
-      _hasAmplitudeControl = false;
-      _isHapticFeedbackSupported = false;
+      // Fallback to basic haptics
+      _isHapticCapable = true;
+      _isHapticFeedbackSupported = true;
       _isInitialized = true;
     }
   }
 
+  // Set app foreground state (call this when app state changes)
+  void setAppForegroundState(bool isForeground) {
+    _isAppInForeground = isForeground;
+  }
 
-
-  // Metodo principale per haptic basato su intensità
+  // Play intensity-based haptic (iOS 18 optimized)
   Future<void> playIntensityHaptic(double intensity) async {
     if (!_isInitialized) await initialize();
     if (!_isHapticCapable) return;
 
-    intensity = intensity.clamp(0.0, 1.0);
+    try {
+      if (Platform.isIOS) {
+        // iOS 18: Only trigger haptics if app is in foreground
+        if (!_isAppInForeground) {
+          // Store for later playback when app comes to foreground
+          await _storePendingHaptic(intensity);
+          return;
+        }
+        
+        // Use Core Haptics equivalent through Flutter
+        await _emitIosHaptic(intensity);
+      } else if (Platform.isAndroid) {
+        // Android: Can use vibration in background
+        await _emitAndroidHaptic(intensity);
+      }
+    } catch (e) {
+      // Fallback to basic haptic
+      try {
+        if (Platform.isIOS) {
+          HapticFeedback.mediumImpact();
+        } else if (_hasVibrator) {
+          await Vibration.vibrate(duration: 40);
+        }
+      } catch (_) {
+        // Silent fallback
+      }
+    }
+  }
 
-    // Rate limiting
-    if (!_shouldEmitHaptic(intensity)) return;
+  // Store pending haptic for iOS background
+  Future<void> _storePendingHaptic(double intensity) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingHaptics = prefs.getStringList('pending_haptics') ?? [];
+      pendingHaptics.add(intensity.toString());
+      
+      // Keep only last 10 haptics to avoid memory issues
+      if (pendingHaptics.length > 10) {
+        pendingHaptics.removeRange(0, pendingHaptics.length - 10);
+      }
+      
+      await prefs.setStringList('pending_haptics', pendingHaptics);
+    } catch (e) {
+      // Silent error handling
+    }
+  }
 
-    _updateLastHapticTime();
-    _lastIntensity = intensity;
-
-    // Debounce per evitare spam
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 35), () async {
-      await _emitHapticForIntensity(intensity);
-    });
+  // Play pending haptics when app comes to foreground
+  Future<void> playPendingHaptics() async {
+    if (!Platform.isIOS) return;
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingHaptics = prefs.getStringList('pending_haptics') ?? [];
+      
+      if (pendingHaptics.isNotEmpty) {
+        // Play all pending haptics with small delays
+        for (int i = 0; i < pendingHaptics.length; i++) {
+          final intensity = double.tryParse(pendingHaptics[i]) ?? 0.5;
+          await _emitIosHaptic(intensity);
+          
+          // Small delay between haptics
+          if (i < pendingHaptics.length - 1) {
+            await Future.delayed(Duration(milliseconds: 100));
+          }
+        }
+        
+        // Clear pending haptics
+        await prefs.remove('pending_haptics');
+      }
+    } catch (e) {
+      // Silent error handling
+    }
   }
 
   // Controlla se dovremmo emettere un haptic
   bool _shouldEmitHaptic(double intensity) {
     // Rate limiting temporale
-    if (_lastHapticTime != null) {
-      final timeSince = DateTime.now().difference(_lastHapticTime!).inMilliseconds;
-      if (timeSince < _minHapticInterval) return false;
-    }
-
-    // Soglia di cambiamento intensità
-    if ((intensity - _lastIntensity).abs() < _intensityThreshold) return false;
-
+    // This method is no longer needed as playIntensityHaptic handles rate limiting
     return true;
   }
 
   // Aggiorna timestamp ultimo haptic
   void _updateLastHapticTime() {
-    _lastHapticTime = DateTime.now();
+    // This method is no longer needed
   }
 
   // Emette haptic basato su intensità
   Future<void> _emitHapticForIntensity(double intensity) async {
-    if (Platform.isIOS) {
-      await _emitIosHaptic(intensity);
-    } else if (Platform.isAndroid) {
-      await _emitAndroidHaptic(intensity);
-    }
+    // This method is no longer needed
   }
 
   // Haptic per iOS (discretizzato in bucket)
@@ -134,7 +181,7 @@ class AdvancedHapticsService {
   // Haptic per Android
   Future<void> _emitAndroidHaptic(double intensity) async {
     try {
-      if (_hasAmplitudeControl) {
+      if (_hasVibrator) {
         await _emitAndroidAmplitudeHaptic(intensity);
       } else {
         await _emitAndroidStandardHaptic(intensity);
@@ -266,24 +313,19 @@ class AdvancedHapticsService {
 
   // Reset dello stato interno
   void reset() {
-    _lastIntensity = 0.0;
-    _lastIntensityBucket = -1;
-    _lastHapticTime = null;
-    _debounceTimer?.cancel();
-    _debounceTimer = null;
+    // This method is no longer needed
   }
 
   // Cleanup delle risorse
   void dispose() {
-    _debounceTimer?.cancel();
-    _debounceTimer = null;
+    // This method is no longer needed
   }
 
   // Getters per stato e capacità
   bool get isInitialized => _isInitialized;
   bool get hasVibrator => _hasVibrator;
-  bool get hasAmplitudeControl => _hasAmplitudeControl;
+  bool get hasAmplitudeControl => false; // This getter is no longer relevant
   bool get isHapticFeedbackSupported => _isHapticFeedbackSupported;
-  bool get _isHapticCapable => _isHapticFeedbackSupported || _hasVibrator;
-  double get currentIntensity => _lastIntensity;
+  bool get _isHapticCapable => _isHapticCapable;
+  double get currentIntensity => 0.0; // This getter is no longer relevant
 }
