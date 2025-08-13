@@ -50,7 +50,7 @@ class AdvancedHapticsService {
   // Play intensity-based haptic (iOS 18 optimized)
   Future<void> playIntensityHaptic(double intensity) async {
     if (!_isInitialized) await initialize();
-    if (!_isHapticCapable) return;
+    if (!isHapticCapable) return;
 
     try {
       if (Platform.isIOS) {
@@ -191,7 +191,7 @@ class AdvancedHapticsService {
   // Feedback di successo
   Future<void> emitSuccessFeedback() async {
     if (!_isInitialized) await initialize();
-    if (!_isHapticCapable) return;
+    if (!isHapticCapable) return;
 
     try {
       if (Platform.isIOS) {
@@ -211,7 +211,7 @@ class AdvancedHapticsService {
   // Feedback di errore
   Future<void> emitErrorFeedback() async {
     if (!_isInitialized) await initialize();
-    if (!_isHapticCapable) return;
+    if (!isHapticCapable) return;
 
     try {
       if (Platform.isIOS) {
@@ -243,7 +243,7 @@ class AdvancedHapticsService {
   // Riproduce pattern completo
   Future<void> playPattern(List<double> pattern) async {
     if (!_isInitialized) await initialize();
-    if (!_isHapticCapable || pattern.isEmpty) return;
+    if (!isHapticCapable || pattern.isEmpty) return;
 
     // Riproduce pattern con timing
     for (int i = 0; i < pattern.length; i++) {
@@ -280,6 +280,6 @@ class AdvancedHapticsService {
   bool get hasVibrator => _hasVibrator;
   bool get hasAmplitudeControl => false; // This getter is no longer relevant
   bool get isHapticFeedbackSupported => _isHapticFeedbackSupported;
-  bool get _isHapticCapable => _isHapticCapable;
+  bool get isHapticCapable => _isHapticCapable;
   double get currentIntensity => 0.0; // This getter is no longer relevant
 }
