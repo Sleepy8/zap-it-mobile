@@ -141,7 +141,7 @@ class _ZapItAppState extends State<ZapItApp> with WidgetsBindingObserver {
       title: 'Zap It',
       theme: AppTheme.darkTheme,
       debugShowCheckedModeBanner: false,
-      navigatorKey: widget.navigatorKey, // Add global navigator key
+      navigatorKey: ZapItApp.navigatorKey, // Add global navigator key
       home: const AuthWrapper(),
       builder: (context, child) {
         // Ensure proper scaling and prevent black screen issues
