@@ -93,6 +93,8 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
             _buildHeader(isSmallScreen),
             Expanded(
               child: SingleChildScrollView(
+                // Disabilita lo scroll durante la registrazione
+                physics: _isRecording ? NeverScrollableScrollPhysics() : AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.all(isSmallScreen ? 8 : 16),
                 child: Column(
                   children: [
@@ -219,10 +221,18 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
                             child: GestureDetector(
                               onTapDown: _onVisualizerTapDown,
                               onTapUp: _onVisualizerTapUp,
+                              onTapCancel: _onVisualizerTapCancel,
                               onPanStart: _onVisualizerPanStart,
                               onPanUpdate: _onVisualizerPanUpdate,
                               onPanEnd: _onVisualizerPanEnd,
                               behavior: HitTestBehavior.opaque,
+                              // Prevenire lo scroll della pagina
+                              onVerticalDragStart: (details) => null,
+                              onVerticalDragUpdate: (details) => null,
+                              onVerticalDragEnd: (details) => null,
+                              onHorizontalDragStart: (details) => null,
+                              onHorizontalDragUpdate: (details) => null,
+                              onHorizontalDragEnd: (details) => null,
                               child: Container(
                                 color: Colors.transparent,
                                 child: Center(
@@ -437,6 +447,11 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     final localPosition = renderBox.globalToLocal(details.globalPosition);
     
     _stopInteractiveRecording(localPosition);
+  }
+
+  void _onVisualizerTapCancel() {
+    if (!_isRecording) return;
+    _stopInteractiveRecording(null);
   }
 
   void _onVisualizerPanStart(DragStartDetails details) {
