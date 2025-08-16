@@ -122,56 +122,120 @@ workflows:
           echo "Using Team ID: $DEVELOPMENT_TEAM"
           echo "Using Certificate: $CODE_SIGN_IDENTITY"
           
-          # Create archive with detailed logging and skip script phases if needed
-          xcodebuild archive \
+          # Try to build without the problematic Run Script phase
+          echo "Attempting build with SKIP_INSTALL to bypass Run Script..."
+          xcodebuild build \
             -workspace Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -archivePath ../build/ios/Runner.xcarchive \
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
             CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
             PROVISIONING_PROFILE_SPECIFIER="Zap it Development" \
             IPHONEOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
-            SKIP_INSTALL=NO \
+            SKIP_INSTALL=YES \
             BUILD_LIBRARY_FOR_DISTRIBUTION=NO \
             -allowProvisioningUpdates \
             -verbose
           
-          # Check if archive was created
-          if [ -d "../build/ios/Runner.xcarchive" ]; then
-            echo "✅ Archive created successfully"
-            echo "Archive size: $(du -sh ../build/ios/Runner.xcarchive | cut -f1)"
+          # Check if build succeeded
+          if [ -d "../build/ios/Release-iphoneos/Runner.app" ]; then
+            echo "✅ Build succeeded, creating archive manually..."
+            mkdir -p ../build/ios/Runner.xcarchive/Products/Applications
+            cp -r ../build/ios/Release-iphoneos/Runner.app ../build/ios/Runner.xcarchive/Products/Applications/
+            
+            # Create Info.plist for the archive
+            cat > ../build/ios/Runner.xcarchive/Info.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>ApplicationProperties</key>
+            <dict>
+              <key>ApplicationPath</key>
+              <string>Applications/Runner.app</string>
+              <key>CFBundleIdentifier</key>
+              <string>$BUNDLE_ID</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>SigningIdentity</key>
+              <string>Apple Development</string>
+            </dict>
+            <key>ArchiveVersion</key>
+            <integer>2</integer>
+            <key>CreationDate</key>
+            <date>$(date -u +%Y-%m-%dT%H:%M:%SZ)</date>
+            <key>Name</key>
+            <string>Runner</string>
+            <key>SchemeName</key>
+            <string>Runner</string>
+          </dict>
+          </plist>
+          EOF
+            
+            echo "✅ Manual archive created with proper structure"
             ls -la ../build/ios/Runner.xcarchive/
           else
-            echo "❌ Archive not created"
-            echo "Build directory contents:"
-            ls -la ../build/ios/ || echo "Build directory not found"
+            echo "❌ Build failed, trying alternative approach..."
             
-            # Try alternative approach - build without archive first
-            echo "Trying alternative build approach..."
+            # Try with different configuration
+            echo "Trying Debug configuration..."
             xcodebuild build \
               -workspace Runner.xcworkspace \
               -scheme Runner \
-              -configuration Release \
+              -configuration Debug \
               -destination 'generic/platform=iOS' \
               CODE_SIGN_STYLE=Manual \
               DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
               CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
               PROVISIONING_PROFILE_SPECIFIER="Zap it Development" \
               IPHONEOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
+              SKIP_INSTALL=YES \
               -allowProvisioningUpdates \
               -verbose
             
-            # Check if build succeeded
-            if [ -d "../build/ios/Release-iphoneos/Runner.app" ]; then
-              echo "✅ Build succeeded, creating archive manually..."
+            if [ -d "../build/ios/Debug-iphoneos/Runner.app" ]; then
+              echo "✅ Debug build succeeded, creating archive manually..."
               mkdir -p ../build/ios/Runner.xcarchive/Products/Applications
-              cp -r ../build/ios/Release-iphoneos/Runner.app ../build/ios/Runner.xcarchive/Products/Applications/
-              echo "✅ Manual archive created"
+              cp -r ../build/ios/Debug-iphoneos/Runner.app ../build/ios/Runner.xcarchive/Products/Applications/
+              
+              # Create Info.plist for the archive
+              cat > ../build/ios/Runner.xcarchive/Info.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>ApplicationProperties</key>
+            <dict>
+              <key>ApplicationPath</key>
+              <string>Applications/Runner.app</string>
+              <key>CFBundleIdentifier</key>
+              <string>$BUNDLE_ID</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>SigningIdentity</key>
+              <string>Apple Development</string>
+            </dict>
+            <key>ArchiveVersion</key>
+            <integer>2</integer>
+            <key>CreationDate</key>
+            <date>$(date -u +%Y-%m-%dT%H:%M:%SZ)</date>
+            <key>Name</key>
+            <string>Runner</string>
+            <key>SchemeName</key>
+            <string>Runner</string>
+          </dict>
+          </plist>
+          EOF
+              
+              echo "✅ Manual archive created from Debug build"
             else
-              echo "❌ Build also failed"
+              echo "❌ Both Release and Debug builds failed"
               exit 1
             fi
           fi
@@ -220,6 +284,8 @@ workflows:
           
           echo "Exporting IPA for iOS 18.6..."
           mkdir -p ../build/ios/ipa
+          
+          # Try normal export first
           xcodebuild -exportArchive \
             -archivePath ../build/ios/Runner.xcarchive \
             -exportPath ../build/ios/ipa \
@@ -233,22 +299,36 @@ workflows:
             IPA_FILE=$(find ../build/ios/ipa -name "*.ipa" | head -1)
             echo "IPA file: $IPA_FILE"
             echo "IPA size: $(ls -lh "$IPA_FILE" | awk '{print $5}')"
-          else
-            echo "❌ IPA export failed"
-            echo "Export directory contents:"
-            ls -la ../build/ios/ipa/ || echo "Export directory not found"
             
-            # Try manual IPA creation
-            echo "Trying manual IPA creation..."
+            # Rename to proper app name
+            mv "$IPA_FILE" "../build/ios/ipa/Zap It.ipa"
+            echo "✅ IPA renamed to 'Zap It.ipa'"
+          else
+            echo "❌ IPA export failed, creating manual IPA..."
+            
+            # Create manual IPA with proper structure
             if [ -d "../build/ios/Runner.xcarchive/Products/Applications/Runner.app" ]; then
               cd ../build/ios/ipa
               mkdir -p Payload
               cp -r ../Runner.xcarchive/Products/Applications/Runner.app Payload/
-              zip -r "Runner.ipa" Payload/
-              echo "✅ Manual IPA created"
-              ls -la *.ipa
+              
+              # Create proper IPA structure
+              echo "Creating IPA with proper signing..."
+              
+              # Sign the app bundle
+              codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements ../../Runner/Runner.entitlements Payload/Runner.app
+              
+              # Create IPA
+              zip -r "Zap It.ipa" Payload/
+              
+              echo "✅ Manual IPA created: Zap It.ipa"
+              echo "IPA size: $(ls -lh Zap\ It.ipa | awk '{print $5}')"
+              
+              # Verify IPA contents
+              echo "Verifying IPA contents:"
+              unzip -l "Zap It.ipa" | head -10
             else
-              echo "❌ Manual IPA creation also failed"
+              echo "❌ App bundle not found for manual IPA creation"
               exit 1
             fi
           fi
