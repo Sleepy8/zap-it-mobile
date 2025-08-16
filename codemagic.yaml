@@ -111,18 +111,27 @@ workflows:
           cd ..
           echo "Attempting Flutter iOS build..."
           flutter build ios --release --no-codesign --verbose
+          FLUTTER_EXIT_CODE=$?
           
-          # Check if Flutter build succeeded
-          if [ -d "build/ios/Release-iphoneos/Runner.app" ]; then
+          echo "Flutter build exit code: $FLUTTER_EXIT_CODE"
+          
+          # Check if Flutter build succeeded and app bundle exists
+          if [ $FLUTTER_EXIT_CODE -eq 0 ] && [ -d "build/ios/Release-iphoneos/Runner.app" ]; then
             echo "✅ Flutter build succeeded"
-            echo "App size: $(du -sh build/ios/Release-iphoneos/Runner.app | cut -f1)"
+            APP_SIZE=$(du -sh build/ios/Release-iphoneos/Runner.app | cut -f1)
+            echo "App size: $APP_SIZE"
             
-            # Create archive structure manually
-            mkdir -p build/ios/Runner.xcarchive/Products/Applications
-            cp -r build/ios/Release-iphoneos/Runner.app build/ios/Runner.xcarchive/Products/Applications/
-            
-            # Create Info.plist for the archive
-            cat > build/ios/Runner.xcarchive/Info.plist << EOF
+            # Additional check to ensure app bundle is not empty
+            if [ "$APP_SIZE" = "0B" ] || [ "$APP_SIZE" = "0" ]; then
+              echo "❌ App bundle is empty, Flutter build failed despite exit code 0"
+              FLUTTER_EXIT_CODE=1
+            else
+              # Create archive structure manually
+              mkdir -p build/ios/Runner.xcarchive/Products/Applications
+              cp -r build/ios/Release-iphoneos/Runner.app build/ios/Runner.xcarchive/Products/Applications/
+              
+              # Create Info.plist for the archive
+              cat > build/ios/Runner.xcarchive/Info.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -151,11 +160,14 @@ workflows:
           </dict>
           </plist>
           EOF
-            
-            echo "✅ Manual archive created with proper structure"
-            ls -la build/ios/Runner.xcarchive/
-            
-          else
+              
+              echo "✅ Manual archive created with proper structure"
+              ls -la build/ios/Runner.xcarchive/
+            fi
+          fi
+          
+          # If Flutter build failed, try xcodebuild
+          if [ $FLUTTER_EXIT_CODE -ne 0 ] || [ "$APP_SIZE" = "0B" ] || [ "$APP_SIZE" = "0" ]; then
             echo "❌ Flutter build failed, trying xcodebuild..."
             cd ios
             
@@ -176,14 +188,21 @@ workflows:
               -allowProvisioningUpdates \
               -verbose
             
+            XCODE_EXIT_CODE=$?
+            echo "xcodebuild exit code: $XCODE_EXIT_CODE"
+            
             # Check if build succeeded
-            if [ -d "../build/ios/Release-iphoneos/Runner.app" ]; then
-              echo "✅ xcodebuild succeeded, creating archive manually..."
-              mkdir -p ../build/ios/Runner.xcarchive/Products/Applications
-              cp -r ../build/ios/Release-iphoneos/Runner.app ../build/ios/Runner.xcarchive/Products/Applications/
+            if [ $XCODE_EXIT_CODE -eq 0 ] && [ -d "../build/ios/Release-iphoneos/Runner.app" ]; then
+              XCODE_APP_SIZE=$(du -sh ../build/ios/Release-iphoneos/Runner.app | cut -f1)
+              echo "xcodebuild app size: $XCODE_APP_SIZE"
               
-              # Create Info.plist for the archive
-              cat > ../build/ios/Runner.xcarchive/Info.plist << EOF
+              if [ "$XCODE_APP_SIZE" != "0B" ] && [ "$XCODE_APP_SIZE" != "0" ]; then
+                echo "✅ xcodebuild succeeded, creating archive manually..."
+                mkdir -p ../build/ios/Runner.xcarchive/Products/Applications
+                cp -r ../build/ios/Release-iphoneos/Runner.app ../build/ios/Runner.xcarchive/Products/Applications/
+                
+                # Create Info.plist for the archive
+                cat > ../build/ios/Runner.xcarchive/Info.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -212,10 +231,14 @@ workflows:
           </dict>
           </plist>
           EOF
-              
-              echo "✅ Manual archive created from xcodebuild"
+                
+                echo "✅ Manual archive created from xcodebuild"
+              else
+                echo "❌ xcodebuild created empty app bundle"
+                exit 1
+              fi
             else
-              echo "❌ Both Flutter and xcodebuild builds failed"
+              echo "❌ xcodebuild failed"
               exit 1
             fi
             
@@ -229,12 +252,26 @@ workflows:
           TEAM_ID=$(security cms -D -i "$PROFILE_PATH" | plutil -extract TeamIdentifier.0 raw -)
           echo "Using Team ID for export: $TEAM_ID"
           
-          echo "Creating IPA directly from Flutter build..."
+          echo "Creating IPA directly from build artifacts..."
           
-          # Check if we have a valid app bundle
+          # Check if we have a valid app bundle from either Flutter or xcodebuild
+          APP_BUNDLE_PATH=""
           if [ -d "build/ios/Release-iphoneos/Runner.app" ]; then
-            echo "✅ Found valid app bundle"
-            echo "App size: $(du -sh build/ios/Release-iphoneos/Runner.app | cut -f1)"
+            APP_BUNDLE_PATH="build/ios/Release-iphoneos/Runner.app"
+          elif [ -d "build/ios/Debug-iphoneos/Runner.app" ]; then
+            APP_BUNDLE_PATH="build/ios/Debug-iphoneos/Runner.app"
+          fi
+          
+          if [ -n "$APP_BUNDLE_PATH" ] && [ -d "$APP_BUNDLE_PATH" ]; then
+            echo "✅ Found valid app bundle at: $APP_BUNDLE_PATH"
+            APP_SIZE=$(du -sh "$APP_BUNDLE_PATH" | cut -f1)
+            echo "App size: $APP_SIZE"
+            
+            # Additional check to ensure app bundle is not empty
+            if [ "$APP_SIZE" = "0B" ] || [ "$APP_SIZE" = "0" ]; then
+              echo "❌ App bundle is empty, cannot create IPA"
+              exit 1
+            fi
             
             # Create IPA directory
             mkdir -p build/ios/ipa
@@ -244,7 +281,7 @@ workflows:
             mkdir -p Payload
             
             # Copy app bundle
-            cp -r ../Release-iphoneos/Runner.app Payload/
+            cp -r "../../$APP_BUNDLE_PATH" Payload/
             
             # Sign the app bundle properly
             echo "Signing app bundle..."
@@ -262,7 +299,8 @@ workflows:
             zip -r "Zap It.ipa" Payload/
             
             echo "✅ IPA created successfully: Zap It.ipa"
-            echo "IPA size: $(ls -lh Zap\ It.ipa | awk '{print $5}')"
+            IPA_SIZE=$(ls -lh "Zap It.ipa" | awk '{print $5}')
+            echo "IPA size: $IPA_SIZE"
             
             # Verify IPA contents
             echo "Verifying IPA contents:"
@@ -274,6 +312,9 @@ workflows:
             echo "❌ No valid app bundle found"
             echo "Available build artifacts:"
             ls -la build/ios/ || echo "No build directory found"
+            if [ -d "build/ios" ]; then
+              find build/ios -name "*.app" -type d 2>/dev/null || echo "No .app bundles found"
+            fi
             exit 1
           fi
       - name: Verify build - iOS 18.6 Features
