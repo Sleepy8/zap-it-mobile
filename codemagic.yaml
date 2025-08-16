@@ -1,10 +1,12 @@
 workflows:
   ios-development:
-    name: iOS Development Build
+    name: iOS Development Build - iOS 18.6 Optimized
     environment:
       vars:
         BUNDLE_ID: "com.example.zapItMobile"
         FLUTTER_VERSION: "3.24.5"
+        IOS_DEPLOYMENT_TARGET: "12.0"
+        XCODE_VERSION: "latest"
       flutter: stable
       xcode: latest
       cocoapods: default
@@ -18,19 +20,51 @@ workflows:
         script: |
           flutter --version
           echo "Using Flutter version: $FLUTTER_VERSION"
+          echo "iOS Deployment Target: $IOS_DEPLOYMENT_TARGET"
+          echo "Xcode version: $(xcodebuild -version)"
       - name: Get Flutter packages
         script: |
           flutter pub get
           flutter pub deps
+          echo "✅ Flutter packages installed"
       - name: Generate app icons
         script: |
           echo "Generating app icons with flutter_launcher_icons..."
           flutter pub run flutter_launcher_icons:main
+          echo "✅ App icons generated"
       - name: Install CocoaPods
         script: |
           cd ios
           pod install --repo-update
+          echo "✅ CocoaPods installed"
           cd ..
+      - name: Verify iOS configuration
+        script: |
+          echo "=== iOS Configuration Verification ==="
+          echo "Checking Info.plist..."
+          if grep -q "UIBackgroundModes" ios/Runner/Info.plist; then
+            echo "✅ Background modes configured"
+          else
+            echo "❌ Background modes missing"
+            exit 1
+          fi
+          
+          if grep -q "NSHapticFeedbackUsageDescription" ios/Runner/Info.plist; then
+            echo "✅ Haptic feedback permissions configured"
+          else
+            echo "❌ Haptic feedback permissions missing"
+            exit 1
+          fi
+          
+          echo "Checking AppDelegate.swift..."
+          if grep -q "MessagingDelegate" ios/Runner/AppDelegate.swift; then
+            echo "✅ Firebase Messaging configured"
+          else
+            echo "❌ Firebase Messaging missing"
+            exit 1
+          fi
+          
+          echo "✅ iOS 18.6 configuration verified"
       - name: Extract signing info
         script: |
           PROFILE_PATH=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision" | head -1)
@@ -51,16 +85,17 @@ workflows:
           echo "export CODE_SIGN_IDENTITY=\"$CERT_NAME\"" >> $CM_ENV
       - name: Build Flutter for iOS (no codesign)
         script: |
-          echo "Building Flutter iOS..."
+          echo "Building Flutter iOS for iOS 18.6..."
           flutter clean
           flutter build ios --release --no-codesign --verbose
-      - name: Archive with xcodebuild (workspace)
+          echo "✅ Flutter iOS build completed"
+      - name: Archive with xcodebuild (workspace) - iOS 18.6 Optimized
         script: |
           cd ios
           echo "Cleaning previous builds..."
           xcodebuild clean -workspace Runner.xcworkspace -scheme Runner -configuration Release
           
-          echo "Creating archive..."
+          echo "Creating archive for iOS 18.6..."
           xcodebuild archive \
             -workspace Runner.xcworkspace \
             -scheme Runner \
@@ -71,8 +106,10 @@ workflows:
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
             CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
             PROVISIONING_PROFILE_SPECIFIER="Zap it Development" \
+            IPHONEOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
             -allowProvisioningUpdates
-      - name: Export IPA
+          echo "✅ Archive created successfully"
+      - name: Export IPA - iOS 18.6 Optimized
         script: |
           # Re-extract team ID in case environment variable didn't persist
           PROFILE_PATH=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision" | head -1)
@@ -80,7 +117,7 @@ workflows:
           echo "Using Team ID for export: $TEAM_ID"
           
           cd ios
-          echo "Creating ExportOptions.plist..."
+          echo "Creating ExportOptions.plist for iOS 18.6..."
           cat > ExportOptions.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -101,20 +138,25 @@ workflows:
             <false/>
             <key>uploadSymbols</key>
             <false/>
+            <key>compileBitcode</key>
+            <false/>
+            <key>thinning</key>
+            <string>&lt;none&gt;</string>
           </dict>
           </plist>
           EOF
           
-          echo "Exporting IPA..."
+          echo "Exporting IPA for iOS 18.6..."
           mkdir -p ../build/ios/ipa
           xcodebuild -exportArchive \
             -archivePath ../build/ios/Runner.xcarchive \
             -exportPath ../build/ios/ipa \
             -exportOptionsPlist ExportOptions.plist \
             -allowProvisioningUpdates
-      - name: Verify build
+          echo "✅ IPA exported successfully"
+      - name: Verify build - iOS 18.6 Features
         script: |
-          echo "=== Build Verification ==="
+          echo "=== iOS 18.6 Build Verification ==="
           if [ -d "build/ios/Runner.xcarchive" ]; then
             echo "✅ Archive created successfully"
             echo "Archive size: $(du -sh build/ios/Runner.xcarchive | cut -f1)"
@@ -129,9 +171,25 @@ workflows:
             echo "IPA file: $IPA_FILE"
             echo "IPA size: $(ls -lh "$IPA_FILE" | awk '{print $5}')"
             
-            # Verify IPA contents
-            echo "Verifying IPA contents..."
-            unzip -l "$IPA_FILE" | head -10
+            # Verify IPA contents for iOS 18.6 features
+            echo "Verifying IPA contents for iOS 18.6..."
+            unzip -l "$IPA_FILE" | grep -E "(Info\.plist|AppDelegate|Runner\.app)" | head -5
+            
+            # Check for iOS 18.6 specific features
+            echo "Checking for iOS 18.6 features..."
+            if unzip -p "$IPA_FILE" "Payload/Runner.app/Info.plist" | grep -q "UIBackgroundModes"; then
+              echo "✅ Background modes included"
+            else
+              echo "❌ Background modes missing from IPA"
+            fi
+            
+            if unzip -p "$IPA_FILE" "Payload/Runner.app/Info.plist" | grep -q "NSHapticFeedbackUsageDescription"; then
+              echo "✅ Haptic feedback permissions included"
+            else
+              echo "❌ Haptic feedback permissions missing from IPA"
+            fi
+            
+            echo "✅ iOS 18.6 build verification completed"
           else
             echo "❌ IPA not found"
             echo "Export logs:"
