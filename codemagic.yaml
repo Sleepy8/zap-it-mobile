@@ -93,21 +93,6 @@ workflows:
           echo "export DEVELOPMENT_TEAM=\"$TEAM_ID\"" >> $CM_ENV
           echo "export CODE_SIGN_IDENTITY=\"$CERT_NAME\"" >> $CM_ENV
           echo "✅ Signing information extracted successfully"
-      - name: Build Flutter for iOS (no codesign)
-        script: |
-          echo "Building Flutter iOS for iOS 18.6..."
-          flutter clean
-          flutter build ios --release --no-codesign --verbose
-          echo "✅ Flutter iOS build completed"
-          
-          # Verify build artifacts
-          if [ -d "build/ios/Release-iphoneos" ]; then
-            echo "✅ iOS build artifacts found"
-            ls -la build/ios/Release-iphoneos/
-          else
-            echo "❌ iOS build artifacts not found"
-            exit 1
-          fi
       - name: Archive with xcodebuild (workspace) - iOS 18.6 Optimized
         script: |
           cd ios
@@ -122,31 +107,22 @@ workflows:
           echo "Using Team ID: $DEVELOPMENT_TEAM"
           echo "Using Certificate: $CODE_SIGN_IDENTITY"
           
-          # Try to build without the problematic Run Script phase
-          echo "Attempting build with SKIP_INSTALL to bypass Run Script..."
-          xcodebuild build \
-            -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -destination 'generic/platform=iOS' \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
-            PROVISIONING_PROFILE_SPECIFIER="Zap it Development" \
-            IPHONEOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
-            SKIP_INSTALL=YES \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=NO \
-            -allowProvisioningUpdates \
-            -verbose
+          # Try Flutter build first (bypasses Xcode project issues)
+          cd ..
+          echo "Attempting Flutter iOS build..."
+          flutter build ios --release --no-codesign --verbose
           
-          # Check if build succeeded
-          if [ -d "../build/ios/Release-iphoneos/Runner.app" ]; then
-            echo "✅ Build succeeded, creating archive manually..."
-            mkdir -p ../build/ios/Runner.xcarchive/Products/Applications
-            cp -r ../build/ios/Release-iphoneos/Runner.app ../build/ios/Runner.xcarchive/Products/Applications/
+          # Check if Flutter build succeeded
+          if [ -d "build/ios/Release-iphoneos/Runner.app" ]; then
+            echo "✅ Flutter build succeeded"
+            echo "App size: $(du -sh build/ios/Release-iphoneos/Runner.app | cut -f1)"
+            
+            # Create archive structure manually
+            mkdir -p build/ios/Runner.xcarchive/Products/Applications
+            cp -r build/ios/Release-iphoneos/Runner.app build/ios/Runner.xcarchive/Products/Applications/
             
             # Create Info.plist for the archive
-            cat > ../build/ios/Runner.xcarchive/Info.plist << EOF
+            cat > build/ios/Runner.xcarchive/Info.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -177,16 +153,18 @@ workflows:
           EOF
             
             echo "✅ Manual archive created with proper structure"
-            ls -la ../build/ios/Runner.xcarchive/
-          else
-            echo "❌ Build failed, trying alternative approach..."
+            ls -la build/ios/Runner.xcarchive/
             
-            # Try with different configuration
-            echo "Trying Debug configuration..."
+          else
+            echo "❌ Flutter build failed, trying xcodebuild..."
+            cd ios
+            
+            # Try xcodebuild with different approach
+            echo "Trying xcodebuild with SKIP_INSTALL..."
             xcodebuild build \
               -workspace Runner.xcworkspace \
               -scheme Runner \
-              -configuration Debug \
+              -configuration Release \
               -destination 'generic/platform=iOS' \
               CODE_SIGN_STYLE=Manual \
               DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
@@ -194,13 +172,15 @@ workflows:
               PROVISIONING_PROFILE_SPECIFIER="Zap it Development" \
               IPHONEOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
               SKIP_INSTALL=YES \
+              BUILD_LIBRARY_FOR_DISTRIBUTION=NO \
               -allowProvisioningUpdates \
               -verbose
             
-            if [ -d "../build/ios/Debug-iphoneos/Runner.app" ]; then
-              echo "✅ Debug build succeeded, creating archive manually..."
+            # Check if build succeeded
+            if [ -d "../build/ios/Release-iphoneos/Runner.app" ]; then
+              echo "✅ xcodebuild succeeded, creating archive manually..."
               mkdir -p ../build/ios/Runner.xcarchive/Products/Applications
-              cp -r ../build/ios/Debug-iphoneos/Runner.app ../build/ios/Runner.xcarchive/Products/Applications/
+              cp -r ../build/ios/Release-iphoneos/Runner.app ../build/ios/Runner.xcarchive/Products/Applications/
               
               # Create Info.plist for the archive
               cat > ../build/ios/Runner.xcarchive/Info.plist << EOF
@@ -233,14 +213,14 @@ workflows:
           </plist>
           EOF
               
-              echo "✅ Manual archive created from Debug build"
+              echo "✅ Manual archive created from xcodebuild"
             else
-              echo "❌ Both Release and Debug builds failed"
+              echo "❌ Both Flutter and xcodebuild builds failed"
               exit 1
             fi
+            
+            cd ..
           fi
-          
-          cd ..
       - name: Export IPA - iOS 18.6 Optimized
         script: |
           echo "=== Exporting IPA ==="
@@ -249,91 +229,53 @@ workflows:
           TEAM_ID=$(security cms -D -i "$PROFILE_PATH" | plutil -extract TeamIdentifier.0 raw -)
           echo "Using Team ID for export: $TEAM_ID"
           
-          cd ios
-          echo "Creating ExportOptions.plist for iOS 18.6..."
-          cat > ExportOptions.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>development</string>
-            <key>teamID</key>
-            <string>$TEAM_ID</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>$BUNDLE_ID</key>
-              <string>Zap it Development</string>
-            </dict>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>uploadBitcode</key>
-            <false/>
-            <key>uploadSymbols</key>
-            <false/>
-            <key>compileBitcode</key>
-            <false/>
-            <key>thinning</key>
-            <string>&lt;none&gt;</string>
-          </dict>
-          </plist>
-          EOF
+          echo "Creating IPA directly from Flutter build..."
           
-          echo "ExportOptions.plist created:"
-          cat ExportOptions.plist
-          
-          echo "Exporting IPA for iOS 18.6..."
-          mkdir -p ../build/ios/ipa
-          
-          # Try normal export first
-          xcodebuild -exportArchive \
-            -archivePath ../build/ios/Runner.xcarchive \
-            -exportPath ../build/ios/ipa \
-            -exportOptionsPlist ExportOptions.plist \
-            -allowProvisioningUpdates \
-            -verbose
-          
-          # Check if IPA was created
-          if [ -f ../build/ios/ipa/*.ipa ]; then
-            echo "✅ IPA exported successfully"
-            IPA_FILE=$(find ../build/ios/ipa -name "*.ipa" | head -1)
-            echo "IPA file: $IPA_FILE"
-            echo "IPA size: $(ls -lh "$IPA_FILE" | awk '{print $5}')"
+          # Check if we have a valid app bundle
+          if [ -d "build/ios/Release-iphoneos/Runner.app" ]; then
+            echo "✅ Found valid app bundle"
+            echo "App size: $(du -sh build/ios/Release-iphoneos/Runner.app | cut -f1)"
             
-            # Rename to proper app name
-            mv "$IPA_FILE" "../build/ios/ipa/Zap It.ipa"
-            echo "✅ IPA renamed to 'Zap It.ipa'"
+            # Create IPA directory
+            mkdir -p build/ios/ipa
+            cd build/ios/ipa
+            
+            # Create Payload directory
+            mkdir -p Payload
+            
+            # Copy app bundle
+            cp -r ../Release-iphoneos/Runner.app Payload/
+            
+            # Sign the app bundle properly
+            echo "Signing app bundle..."
+            codesign --force --sign "$CODE_SIGN_IDENTITY" \
+              --entitlements ../../../ios/Runner/Runner.entitlements \
+              --timestamp=none \
+              Payload/Runner.app
+            
+            # Verify signing
+            echo "Verifying app signature..."
+            codesign -dv Payload/Runner.app
+            
+            # Create IPA
+            echo "Creating IPA..."
+            zip -r "Zap It.ipa" Payload/
+            
+            echo "✅ IPA created successfully: Zap It.ipa"
+            echo "IPA size: $(ls -lh Zap\ It.ipa | awk '{print $5}')"
+            
+            # Verify IPA contents
+            echo "Verifying IPA contents:"
+            unzip -l "Zap It.ipa" | head -15
+            
+            cd ../..
+            
           else
-            echo "❌ IPA export failed, creating manual IPA..."
-            
-            # Create manual IPA with proper structure
-            if [ -d "../build/ios/Runner.xcarchive/Products/Applications/Runner.app" ]; then
-              cd ../build/ios/ipa
-              mkdir -p Payload
-              cp -r ../Runner.xcarchive/Products/Applications/Runner.app Payload/
-              
-              # Create proper IPA structure
-              echo "Creating IPA with proper signing..."
-              
-              # Sign the app bundle
-              codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements ../../Runner/Runner.entitlements Payload/Runner.app
-              
-              # Create IPA
-              zip -r "Zap It.ipa" Payload/
-              
-              echo "✅ Manual IPA created: Zap It.ipa"
-              echo "IPA size: $(ls -lh Zap\ It.ipa | awk '{print $5}')"
-              
-              # Verify IPA contents
-              echo "Verifying IPA contents:"
-              unzip -l "Zap It.ipa" | head -10
-            else
-              echo "❌ App bundle not found for manual IPA creation"
-              exit 1
-            fi
+            echo "❌ No valid app bundle found"
+            echo "Available build artifacts:"
+            ls -la build/ios/ || echo "No build directory found"
+            exit 1
           fi
-          
-          cd ../..
       - name: Verify build - iOS 18.6 Features
         script: |
           echo "=== iOS 18.6 Build Verification ==="
