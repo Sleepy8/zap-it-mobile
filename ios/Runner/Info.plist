@@ -46,7 +46,7 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	
-	<!-- Permessi per notifiche push - FIXED FOR iOS 18 -->
+	<!-- Permessi per notifiche push - UPDATED FOR iOS 18.6 -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
@@ -56,16 +56,42 @@
 		<string>voip</string>
 	</array>
 	
-	<!-- Permessi per haptic feedback - FIXED FOR iOS 18 -->
+	<!-- Permessi per haptic feedback - UPDATED FOR iOS 18.6 -->
 	<key>NSHapticFeedbackUsageDescription</key>
 	<string>L'app usa l'haptic feedback per le vibrazioni ZAP</string>
 	
-	<!-- Permessi per notifiche - FIXED FOR iOS 18 -->
+	<!-- Permessi per notifiche - UPDATED FOR iOS 18.6 -->
 	<key>NSUserNotificationUsageDescription</key>
 	<string>L'app invia notifiche per gli ZAP ricevuti</string>
 	
-	<!-- Permessi per notifiche push - FIXED FOR iOS 18 -->
+	<!-- Configurazioni per notifiche push - UPDATED FOR iOS 18.6 -->
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
+	
+	<!-- Configurazioni per iOS 18.6 -->
+	<key>UIRequiresFullScreen</key>
+	<false/>
+	
+	<!-- Configurazioni per haptic feedback avanzato -->
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	
+	<!-- Configurazioni per background app refresh -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<string>background-processing</string>
+		<string>background-fetch</string>
+		<string>audio</string>
+		<string>voip</string>
+	</array>
+	
+	<!-- Configurazioni per notifiche silenziose -->
+	<key>NSUserNotificationUsageDescription</key>
+	<string>L'app invia notifiche per gli ZAP ricevuti</string>
+	
+	<!-- Configurazioni per haptic feedback -->
+	<key>NSHapticFeedbackUsageDescription</key>
+	<string>L'app usa l'haptic feedback per le vibrazioni ZAP</string>
 </dict>
 </plist>

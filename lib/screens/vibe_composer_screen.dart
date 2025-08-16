@@ -6,6 +6,7 @@ import 'dart:math' as Math;
 import '../theme.dart';
 import '../services/vibration_pattern_service.dart';
 import '../services/platform_service.dart';
+import '../services/advanced_haptics_service.dart';
 
 class VibeComposerScreen extends StatefulWidget {
   const VibeComposerScreen({Key? key}) : super(key: key);
@@ -17,6 +18,8 @@ class VibeComposerScreen extends StatefulWidget {
 class _VibeComposerScreenState extends State<VibeComposerScreen>
     with TickerProviderStateMixin {
   final VibrationPatternService _patternService = VibrationPatternService();
+  final AdvancedHapticsService _hapticsService = AdvancedHapticsService();
+  
   List<double> _currentPattern = [];
   List<int> _currentIntensities = [];
   List<int> _currentGaps = [];
@@ -54,6 +57,11 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     );
     _loadSavedPatterns();
     _detectVibrationCapabilities();
+    _initializeHaptics();
+  }
+
+  Future<void> _initializeHaptics() async {
+    await _hapticsService.initialize();
   }
 
   Future<void> _detectVibrationCapabilities() async {
@@ -93,7 +101,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
             _buildHeader(isSmallScreen),
             Expanded(
               child: SingleChildScrollView(
-                // Disabilita lo scroll durante la registrazione
+                // Disabilita lo scroll durante la registrazione - FIXED FOR iOS 18.6
                 physics: _isRecording ? NeverScrollableScrollPhysics() : AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.all(isSmallScreen ? 8 : 16),
                 child: Column(
@@ -142,25 +150,21 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
           ),
           SizedBox(width: isSmallScreen ? 8 : 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Vibe Composer',
-                  style: TextStyle(
-                    fontSize: isSmallScreen ? 20 : 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                Text(
-                  'Crea vibrazioni personalizzate',
-                  style: TextStyle(
-                    fontSize: isSmallScreen ? 12 : 14,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
+            child: Text(
+              'Vibe Composer',
+              style: TextStyle(
+                fontSize: isSmallScreen ? 20 : 24,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: Icon(
+              Icons.close,
+              color: AppTheme.textSecondary,
+              size: isSmallScreen ? 20 : 24,
             ),
           ),
         ],
@@ -169,257 +173,115 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
   }
 
   Widget _buildVisualizer(bool isSmallScreen) {
-    final visualizerHeight = isSmallScreen ? 320.0 : 400.0;
-    
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              key: _visualizerKey,
-              height: visualizerHeight,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  _visualizerHeight = constraints.maxHeight;
-                  return Container(
-                    height: visualizerHeight,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          AppTheme.surfaceDark.withOpacity(0.3),
-                          AppTheme.surfaceDark.withOpacity(0.1),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: AppTheme.limeAccent.withOpacity(0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Stack(
-                      children: [
-                        AnimatedBuilder(
-                          animation: _animation,
-                          builder: (context, child) {
-                            return CustomPaint(
-                              painter: WavePainter(
-                                pattern: _currentPattern,
-                                intensities: _currentIntensities,
-                                animation: _animation,
-                                isPlaying: _isPlaying,
-                                isSmallScreen: isSmallScreen,
-                              ),
-                              size: Size.infinite,
-                            );
-                          },
-                        ),
-                        if (_isRecording)
-                          Positioned.fill(
-                            child: GestureDetector(
-                              onTapDown: _onVisualizerTapDown,
-                              onTapUp: _onVisualizerTapUp,
-                              onTapCancel: _onVisualizerTapCancel,
-                              onPanStart: _onVisualizerPanStart,
-                              onPanUpdate: _onVisualizerPanUpdate,
-                              onPanEnd: _onVisualizerPanEnd,
-                              behavior: HitTestBehavior.opaque,
-                              // Prevenire lo scroll della pagina
-                              onVerticalDragStart: (details) => null,
-                              onVerticalDragUpdate: (details) => null,
-                              onVerticalDragEnd: (details) => null,
-                              onHorizontalDragStart: (details) => null,
-                              onHorizontalDragUpdate: (details) => null,
-                              onHorizontalDragEnd: (details) => null,
-                              child: Container(
-                                color: Colors.transparent,
-                                child: Center(
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: isSmallScreen ? 12 : 16, 
-                                      vertical: isSmallScreen ? 6 : 8
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.surfaceDark.withOpacity(0.8),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: AppTheme.limeAccent.withOpacity(0.5),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      '🎙️ Tocca qui per registrare!\nTrascina per cambiare intensità',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: AppTheme.textPrimary,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: isSmallScreen ? 10 : 12,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          )
-                        else
-                          Center(
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: isSmallScreen ? 12 : 16, 
-                                vertical: isSmallScreen ? 6 : 8
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.surfaceDark.withOpacity(0.8),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: AppTheme.limeAccent.withOpacity(0.5),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Text(
-                                _currentPattern.isEmpty 
-                                  ? 'Crea il tuo pattern di vibrazione'
-                                  : '${_currentPattern.length} impulsi creati',
-                                style: TextStyle(
-                                  color: AppTheme.textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: isSmallScreen ? 12 : 14,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 40,
-            height: visualizerHeight,
-            child: _buildIntensityScale(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIntensityScale() {
-    return Column(
-      children: List.generate(11, (index) {
-        final percentage = 100 - (index * 10);
-        final isActive = _currentTouchIntensity >= (percentage / 100);
-        
-        final itemHeight = (_visualizerHeight / 10) * 0.9;
-        
-        return SizedBox(
-          height: itemHeight,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              '$percentage%',
-              style: TextStyle(
-                color: isActive ? AppTheme.limeAccent : Colors.white.withOpacity(0.4),
-                fontSize: 8,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-                letterSpacing: 0.0,
-              ),
-            ),
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildControls(bool isSmallScreen) {
     return Container(
-      padding: EdgeInsets.all(isSmallScreen ? 8 : 12),
+      height: _visualizerHeight,
       decoration: BoxDecoration(
-        color: AppTheme.surfaceDark.withOpacity(0.5),
+        color: AppTheme.surfaceDark,
         borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildSmallControlButton(
-            icon: _isPlaying ? Icons.stop_rounded : Icons.play_arrow_rounded,
-            label: _isPlaying ? 'Stop' : 'Play',
-            onPressed: () {
-              if (_isPlaying) {
-                _stopPlaying();
-              } else {
-                _playPattern();
-              }
-            },
-            color: _isPlaying ? AppTheme.buttonDanger : AppTheme.buttonSuccess,
-            isSmallScreen: isSmallScreen,
-          ),
-          _buildSmallControlButton(
-            icon: Icons.fiber_manual_record_rounded,
-            label: 'Record',
-            onPressed: _toggleRecording,
-            color: _isRecording ? AppTheme.buttonDanger : AppTheme.buttonWarning,
-            isSmallScreen: isSmallScreen,
-          ),
-          _buildSmallControlButton(
-            icon: Icons.clear_rounded,
-            label: 'Clear',
-            onPressed: _clearPattern,
-            color: AppTheme.buttonDanger,
-            isSmallScreen: isSmallScreen,
-          ),
-          _buildSmallControlButton(
-            icon: Icons.save_rounded,
-            label: 'Save',
-            onPressed: _saveCurrentPattern,
-            color: AppTheme.buttonSecondary,
-            isSmallScreen: isSmallScreen,
+        border: Border.all(
+          color: _isRecording ? AppTheme.limeAccent : AppTheme.surfaceLight,
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: GestureDetector(
+          key: _visualizerKey,
+          onTapDown: _isRecording ? _onVisualizerTapDown : null,
+          onTapUp: _isRecording ? _onVisualizerTapUp : null,
+          onTapCancel: _isRecording ? _onVisualizerTapCancel : null,
+          onPanStart: _isRecording ? _onVisualizerPanStart : null,
+          onPanUpdate: _isRecording ? _onVisualizerPanUpdate : null,
+          onPanEnd: _isRecording ? _onVisualizerPanEnd : null,
+          // FIXED FOR iOS 18.6: Disabilita il movimento della pagina durante la registrazione
+          behavior: HitTestBehavior.opaque,
+          child: Stack(
+            children: [
+              // Background grid
+              _buildGrid(),
+              // Pattern visualization
+              _buildPatternVisualization(),
+              // Recording indicator
+              if (_isRecording) _buildRecordingIndicator(),
+              // Touch indicator
+              if (_isVibrating) _buildTouchIndicator(),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildSmallControlButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback? onPressed,
-    required Color color,
-    required bool isSmallScreen,
-  }) {
-    final buttonSize = isSmallScreen ? 60.0 : 70.0;
-    final iconSize = isSmallScreen ? 18.0 : 20.0;
-    final fontSize = isSmallScreen ? 9.0 : 10.0;
-    
-    return Container(
-      width: buttonSize,
-      height: buttonSize,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+  Widget _buildGrid() {
+    return CustomPaint(
+      size: Size.infinite,
+      painter: GridPainter(
+        color: AppTheme.surfaceLight.withOpacity(0.3),
+        gridSize: 20,
+      ),
+    );
+  }
+
+  Widget _buildPatternVisualization() {
+    if (_currentPattern.isEmpty) {
+      return Center(
+        child: Text(
+          _isRecording ? 'Tocca per registrare' : 'Nessun pattern',
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 16,
           ),
-          elevation: 3,
-          side: BorderSide.none,
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      );
+    }
+
+    return CustomPaint(
+      size: Size.infinite,
+      painter: PatternPainter(
+        pattern: _currentPattern,
+        intensities: _currentIntensities,
+        gaps: _currentGaps,
+        isPlaying: _isPlaying,
+        animation: _animation,
+      ),
+    );
+  }
+
+  Widget _buildRecordingIndicator() {
+    return Positioned(
+      top: 16,
+      right: 16,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppTheme.limeAccent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: iconSize, color: Colors.white),
-            SizedBox(height: isSmallScreen ? 1 : 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: fontSize,
-                fontWeight: FontWeight.w600,
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
                 color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+            ),
+            SizedBox(width: 6),
+            Text(
+              'Registrando',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -428,7 +290,109 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     );
   }
 
-  // SEMPLIFICATO PER iOS - NO TIMER COMPLESSI
+  Widget _buildTouchIndicator() {
+    return Positioned(
+      left: 16,
+      bottom: 16,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppTheme.limeAccent.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          'Intensità: ${(_currentTouchIntensity * 100).round()}%',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildControls(bool isSmallScreen) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _buildControlButton(
+          icon: _isRecording ? Icons.stop : Icons.fiber_manual_record,
+          label: _isRecording ? 'Stop' : 'Registra',
+          color: _isRecording ? Colors.red : AppTheme.limeAccent,
+          onPressed: _toggleRecording,
+          isSmallScreen: isSmallScreen,
+        ),
+        _buildControlButton(
+          icon: _isPlaying ? Icons.stop : Icons.play_arrow,
+          label: _isPlaying ? 'Stop' : 'Riproduci',
+          color: _isPlaying ? Colors.red : AppTheme.limeAccent,
+          onPressed: _isPlaying ? _stopPlaying : _playPattern,
+          isSmallScreen: isSmallScreen,
+        ),
+        _buildControlButton(
+          icon: Icons.clear,
+          label: 'Cancella',
+          color: Colors.orange,
+          onPressed: _clearPattern,
+          isSmallScreen: isSmallScreen,
+        ),
+        _buildControlButton(
+          icon: Icons.save,
+          label: 'Salva',
+          color: AppTheme.limeAccent,
+          onPressed: _addPattern,
+          isSmallScreen: isSmallScreen,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildControlButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+    required bool isSmallScreen,
+  }) {
+    final iconSize = isSmallScreen ? 20.0 : 24.0;
+    final fontSize = isSmallScreen ? 10.0 : 12.0;
+    
+    return Expanded(
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: 4),
+        child: ElevatedButton(
+          onPressed: onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            padding: EdgeInsets.symmetric(vertical: isSmallScreen ? 8 : 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: 3,
+            side: BorderSide.none,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: iconSize, color: Colors.white),
+              SizedBox(height: isSmallScreen ? 1 : 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // UPDATED FOR iOS 18.6: Gestione touch migliorata
   void _onVisualizerTapDown(TapDownDetails details) {
     if (!_isRecording) return;
     
@@ -476,7 +440,6 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
 
   void _onVisualizerPanEnd(DragEndDetails details) {
     if (!_isRecording) return;
-    
     _stopInteractiveRecording(null);
   }
 
@@ -494,7 +457,7 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     // Niente di speciale
   }
 
-  // SEMPLIFICATO PER iOS - NO TIMER
+  // UPDATED FOR iOS 18.6: Registrazione interattiva migliorata
   void _startInteractiveRecording(Offset position) {
     setState(() {
       _isVibrating = true;
@@ -519,16 +482,8 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     }
     _currentGaps.add(gapMs < _minTapGapMs ? _minTapGapMs : gapMs.clamp(0, 10000));
     
-    // SEMPLIFICATO - SOLO UN FEEDBACK INIZIALE
-    if (PlatformService.isAndroid) {
-      if (_hasAmplitudeControl) {
-        Vibration.vibrate(duration: 100, amplitude: intensity);
-      } else {
-        Vibration.vibrate(duration: 100);
-      }
-    } else if (PlatformService.isIOS) {
-      _triggerHapticFeedback(intensity);
-    }
+    // UPDATED FOR iOS 18.6: Feedback tattile migliorato
+    _hapticsService.playRecordingFeedback(intensity / 255.0);
   }
 
   void _updateVibrationIntensity(Offset position) {
@@ -557,20 +512,6 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     }
   }
 
-  void _triggerHapticFeedback(int intensity) {
-    if (PlatformService.isIOS) {
-      if (intensity > 180) {
-        HapticFeedback.heavyImpact();
-      } else if (intensity > 120) {
-        HapticFeedback.mediumImpact();
-      } else if (intensity > 60) {
-        HapticFeedback.lightImpact();
-      } else {
-        HapticFeedback.selectionClick();
-      }
-    }
-  }
-
   void _stopInteractiveRecording(Offset? position) {
     setState(() {
       _isVibrating = false;
@@ -593,28 +534,39 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     _lastReleaseTime = DateTime.now();
   }
 
-  int _calculateIntensityFromPosition(Offset position, {double? visualizerHeight}) {
-    final height = visualizerHeight ?? _visualizerHeight;
-    final normalizedY = (position.dy / height).clamp(0.0, 1.0);
-    final intensity = (1.0 - normalizedY).clamp(0.0, 1.0);
-    return (intensity * 255).round().clamp(0, 255);
+  int _calculateIntensityFromPosition(Offset position, {required double visualizerHeight}) {
+    final normalizedY = (visualizerHeight - position.dy) / visualizerHeight;
+    return (normalizedY * 255).clamp(0, 255).round();
   }
 
   Widget _buildPatternLibrary(bool isSmallScreen) {
+    if (_savedPatterns.isEmpty) {
+      return Container(
+        padding: EdgeInsets.all(20),
+        child: Text(
+          'Nessun pattern salvato',
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 16,
+          ),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Libreria Pattern',
+          'Pattern Salvati',
           style: TextStyle(
             fontSize: isSmallScreen ? 18 : 20,
             fontWeight: FontWeight.bold,
             color: AppTheme.textPrimary,
           ),
         ),
-        SizedBox(height: isSmallScreen ? 12 : 16),
-        SizedBox(
-          height: isSmallScreen ? 100.0 : 120.0,
+        SizedBox(height: 12),
+        Container(
+          height: isSmallScreen ? 120 : 150,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: _savedPatterns.length,
@@ -628,191 +580,107 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
     );
   }
 
-  Widget _buildPatternCard(VibrationPattern pattern, isSmallScreen) {
+  Widget _buildPatternCard(VibrationPattern pattern, bool isSmallScreen) {
     final isSelected = _selectedPattern?.id == pattern.id;
     
     return Container(
-      width: isSmallScreen ? 140.0 : 160.0,
-      margin: EdgeInsets.only(right: isSmallScreen ? 8.0 : 12.0),
-      child: Card(
-        elevation: isSelected ? 8 : 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-            color: isSelected ? AppTheme.limeAccent : Colors.transparent,
-            width: 2,
+      width: isSmallScreen ? 100 : 120,
+      margin: EdgeInsets.only(right: 12),
+      child: GestureDetector(
+        onTap: () => _selectPattern(pattern),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isSelected ? AppTheme.limeAccent : AppTheme.surfaceDark,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? AppTheme.limeAccent : AppTheme.surfaceLight,
+              width: 2,
+            ),
           ),
-        ),
-        child: InkWell(
-          onTap: () => _loadPattern(pattern),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: EdgeInsets.all(isSmallScreen ? 8 : 12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(int.parse('0xFF${pattern.color.substring(1)}')).withOpacity(0.1),
-                  Color(int.parse('0xFF${pattern.color.substring(1)}')).withOpacity(0.05),
-                ],
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Color(int.parse(pattern.color.replaceAll('#', '0xFF'))),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.vibration,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.music_note_rounded,
-                      color: Color(int.parse('0xFF${pattern.color.substring(1)}')),
-                      size: isSmallScreen ? 14 : 18,
-                    ),
-                    SizedBox(width: isSmallScreen ? 3 : 6),
-                    Expanded(
-                      child: Text(
-                        pattern.name,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                          fontSize: isSmallScreen ? 10 : 13,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+              SizedBox(height: 8),
+              Text(
+                pattern.name,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : AppTheme.textPrimary,
+                  fontSize: isSmallScreen ? 10 : 12,
+                  fontWeight: FontWeight.w600,
                 ),
-                SizedBox(height: isSmallScreen ? 2 : 4),
-                Text(
-                  '${pattern.pattern.length} impulsi',
-                  style: TextStyle(
-                    fontSize: isSmallScreen ? 8 : 11,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                const Spacer(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      onPressed: () => _playPattern(
-                        pattern.pattern,
-                        List<int>.filled(pattern.pattern.length, 220),
-                        _synthesizeGaps(pattern.pattern.length),
-                      ),
-                      icon: Icon(
-                        Icons.play_arrow_rounded,
-                        color: Color(int.parse('0xFF${pattern.color.substring(1)}')),
-                        size: isSmallScreen ? 14 : 18,
-                      ),
-                      padding: EdgeInsets.zero,
-                      constraints: BoxConstraints(
-                        minWidth: isSmallScreen ? 24 : 32,
-                        minHeight: isSmallScreen ? 24 : 32,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => _deletePattern(pattern.id),
-                      icon: Icon(
-                        Icons.delete_rounded,
-                        color: Colors.red.withOpacity(0.7),
-                        size: isSmallScreen ? 14 : 18,
-                      ),
-                      padding: EdgeInsets.zero,
-                      constraints: BoxConstraints(
-                        minWidth: isSmallScreen ? 24 : 32,
-                        minHeight: isSmallScreen ? 24 : 32,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // SEMPLIFICATO PER iOS - NO TIMER COMPLESSI
-  void _playPattern([List<double>? pattern, List<int>? intensities, List<int>? gaps]) async {
-    final patternToPlay = pattern ?? _currentPattern;
-    final intensitiesToPlay = intensities ?? (
-      _currentIntensities.length == patternToPlay.length
-        ? _currentIntensities
-        : List<int>.filled(patternToPlay.length, 220)
-    );
-    final gapsToPlay = gaps ?? (
-      _currentGaps.length == patternToPlay.length
-        ? _currentGaps
-        : _synthesizeGaps(patternToPlay.length)
-    );
-    
-    if (patternToPlay.isEmpty) return;
+  void _selectPattern(VibrationPattern pattern) {
+    setState(() {
+      _selectedPattern = pattern;
+      _currentPattern = pattern.pattern.map((p) => p * 1000).toList(); // Convert to milliseconds
+      _currentIntensities = pattern.pattern.map((p) => (p * 255).round()).toList();
+      _currentGaps = List.filled(pattern.pattern.length - 1, 100); // Default gaps
+    });
+  }
+
+  // UPDATED FOR iOS 18.6: Riproduzione pattern migliorata
+  void _playPattern() async {
+    if (_currentPattern.isEmpty) return;
 
     setState(() {
       _isPlaying = true;
     });
 
-    _animationController.repeat();
+    _animationController.forward();
 
     try {
-      if (PlatformService.isAndroid) {
-        final hasVibrator = await Vibration.hasVibrator() ?? false;
-        if (hasVibrator) {
-          final hasAmplitude = await Vibration.hasAmplitudeControl() ?? false;
-
-          final fullPattern = <int>[];
-          final fullIntensities = <int>[];
-          
-          fullPattern.add(gapsToPlay.isNotEmpty ? gapsToPlay.first.clamp(0, 10000) : 0);
-          fullIntensities.add(0);
-
-          for (int i = 0; i < patternToPlay.length; i++) {
-            final rawDuration = patternToPlay[i].round();
-            final onDuration = rawDuration.clamp(5, 6000);
-            fullPattern.add(onDuration);
-
-            int amplitude = (i < intensitiesToPlay.length ? intensitiesToPlay[i] : 220);
-            amplitude = amplitude.clamp(1, 255);
-            fullIntensities.add(amplitude);
-
-            final gap = (i + 1 < gapsToPlay.length) ? gapsToPlay[i + 1].clamp(0, 10000) : 0;
-            if (i < patternToPlay.length - 1) {
-              fullPattern.add(gap);
-              fullIntensities.add(0);
+      // UPDATED FOR iOS 18.6: Usa il servizio di haptic avanzato
+      await _hapticsService.playPattern(_currentPattern.map((p) => p / 1000.0).toList());
+    } catch (e) {
+      // Fallback a vibrazione tradizionale
+      try {
+        if (PlatformService.isAndroid) {
+          final patternToPlay = _currentPattern.map((p) => p.round()).toList();
+          await Vibration.vibrate(pattern: patternToPlay);
+        } else if (PlatformService.isIOS) {
+          // iOS fallback
+          for (int i = 0; i < _currentPattern.length; i++) {
+            final intensity = _currentIntensities[i] / 255.0;
+            await _hapticsService.playIntensityHaptic(intensity);
+            if (i < _currentPattern.length - 1) {
+              await Future.delayed(Duration(milliseconds: _currentPattern[i].round()));
             }
           }
-
-          if (hasAmplitude) {
-            await Vibration.vibrate(pattern: fullPattern, intensities: fullIntensities);
-          } else {
-            await Vibration.vibrate(pattern: fullPattern);
-          }
         }
-      } else if (PlatformService.isIOS) {
-        // SEMPLIFICATO - SOLO HAPTIC FEEDBACK SEMPLICE
-        for (int i = 0; i < patternToPlay.length; i++) {
-          final intensity = i < intensitiesToPlay.length ? intensitiesToPlay[i] : 128;
-          
-          _triggerHapticFeedback(intensity);
-          
-          // Attendi la durata dell'impulso
-          await Future.delayed(Duration(milliseconds: patternToPlay[i].round()));
-        }
+      } catch (e) {
+        // Gestione errori silenziosa
       }
-    } catch (e) {
-      // Gestione errori silenziosa
     }
 
     // Calcola durata totale
     int totalMs = 0;
-    if (gapsToPlay.isNotEmpty) totalMs += gapsToPlay.first.clamp(0, 10000);
-    for (int i = 0; i < patternToPlay.length; i++) {
-      totalMs += patternToPlay[i].round();
-      if (i + 1 < gapsToPlay.length) totalMs += gapsToPlay[i + 1].clamp(0, 10000);
+    if (_currentGaps.isNotEmpty) totalMs += _currentGaps.first.clamp(0, 10000);
+    for (int i = 0; i < _currentPattern.length; i++) {
+      totalMs += _currentPattern[i].round();
+      if (i + 1 < _currentGaps.length) totalMs += _currentGaps[i + 1].clamp(0, 10000);
     }
     
     Future.delayed(Duration(milliseconds: totalMs), () {
@@ -940,167 +808,91 @@ class _VibeComposerScreenState extends State<VibeComposerScreen>
       ),
     );
   }
-
-  void _loadPattern(VibrationPattern pattern) {
-    setState(() {
-      _currentPattern = pattern.pattern.map((value) => 
-        (value * 1000.0).round().toDouble()
-      ).toList();
-      _currentIntensities = List<int>.filled(pattern.pattern.length, 220);
-      _currentGaps = _synthesizeGaps(_currentPattern.length);
-      _selectedPattern = pattern;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Pattern "${pattern.name}" caricato!'),
-        backgroundColor: AppTheme.primary,
-      ),
-    );
-  }
-
-  void _deletePattern(String patternId) async {
-    await _patternService.deletePattern(patternId);
-    await _loadSavedPatterns();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Pattern eliminato!'),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-
-  List<int> _synthesizeGaps(int segments) {
-    if (segments <= 0) return [];
-    final List<int> gaps = [];
-    gaps.add(0);
-    for (int i = 1; i < segments; i++) {
-      gaps.add(60);
-    }
-    return gaps;
-  }
-
-  void _saveCurrentPattern() {
-    if (_currentPattern.isEmpty) return;
-    _addPattern();
-  }
 }
 
-class WavePainter extends CustomPainter {
+// Custom painters for visualization
+class GridPainter extends CustomPainter {
+  final Color color;
+  final double gridSize;
+
+  GridPainter({required this.color, required this.gridSize});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+
+    for (double x = 0; x < size.width; x += gridSize) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y < size.height; y += gridSize) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class PatternPainter extends CustomPainter {
   final List<double> pattern;
   final List<int> intensities;
-  final Animation<double> animation;
+  final List<int> gaps;
   final bool isPlaying;
-  final bool isSmallScreen;
+  final Animation<double> animation;
 
-  WavePainter({
+  PatternPainter({
     required this.pattern,
     required this.intensities,
-    required this.animation,
+    required this.gaps,
     required this.isPlaying,
-    required this.isSmallScreen,
+    required this.animation,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final borderPaint = Paint()
-      ..color = Colors.white.withOpacity(0.15)
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke;
-    
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      const Radius.circular(20),
-    );
-    canvas.drawRRect(rect, borderPaint);
-    
-    final gridPaint = Paint()
-      ..color = Colors.white.withOpacity(0.08)
-      ..strokeWidth = 0.8
-      ..style = PaintingStyle.stroke;
-
-    for (int i = 0; i <= 10; i++) {
-      final y = (size.height / 10) * i;
-      final isMainLine = i % 2 == 0;
-      
-      final path = Path();
-      path.moveTo(10, y);
-      path.lineTo(size.width - 10, y);
-      
-      canvas.drawPath(
-        path,
-        gridPaint..strokeWidth = isMainLine ? 1.2 : 0.6,
-      );
-    }
-
-    for (int i = 0; i <= 10; i++) {
-      final x = (size.width / 10) * i;
-      final isMainLine = i % 2 == 0;
-      
-      final path = Path();
-      path.moveTo(x, 10);
-      path.lineTo(x, size.height - 10);
-      
-      canvas.drawPath(
-        path,
-        gridPaint..strokeWidth = isMainLine ? 1.2 : 0.6,
-      );
-    }
+    if (pattern.isEmpty) return;
 
     final paint = Paint()
-      ..color = AppTheme.limeAccent.withOpacity(0.7)
-      ..style = PaintingStyle.fill;
+      ..color = AppTheme.limeAccent
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
 
-    if (pattern.isEmpty) {
-      canvas.drawLine(
-        Offset(0, size.height / 2), 
-        Offset(size.width, size.height / 2), 
-        paint..strokeWidth = isSmallScreen ? 1.5 : 2
-      );
-      return;
-    }
-
-    if (pattern.length == 1) {
-      final double x = size.width / 2;
-      final intensity = intensities.isNotEmpty ? intensities[0] / 255.0 : 0.5;
-      final double y = size.height / 2 + (Math.sin(animation.value * 2 * Math.pi) * intensity * (size.height / 4));
-      final circleSize = isSmallScreen ? 4.0 * intensity : 5.0 * intensity;
-      canvas.drawCircle(Offset(x, y), circleSize, paint);
-      return;
-    }
+    final path = Path();
+    double currentX = 0;
+    double currentY = size.height / 2;
 
     for (int i = 0; i < pattern.length; i++) {
-      final double x = size.width * (i / (pattern.length - 1.0));
+      final duration = pattern[i];
+      final intensity = intensities[i];
+      final normalizedIntensity = intensity / 255.0;
       
-      final intensity = i < intensities.length ? intensities[i] / 255.0 : 0.5;
-      final double y = size.height / 2 + (Math.sin(animation.value * 2 * Math.pi + i * 0.5) * intensity * (size.height / 4));
+      final segmentWidth = (duration / 1000.0) * size.width * 0.1; // Scale factor
+      final segmentHeight = normalizedIntensity * size.height * 0.8;
       
-      if (x.isFinite && y.isFinite) {
-        final circleSize = isSmallScreen ? 4.0 * intensity : 5.0 * intensity;
-        canvas.drawCircle(Offset(x, y), circleSize, paint);
-        
-        if (!isSmallScreen && intensity > 0.7) {
-          canvas.drawCircle(
-            Offset(x, y), 
-            8.0 * intensity, 
-            Paint()
-              ..color = AppTheme.limeAccent.withOpacity(0.3)
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 2
-          );
-        }
+      final targetY = size.height / 2 - segmentHeight / 2;
+      
+      if (i == 0) {
+        path.moveTo(currentX, currentY);
+      }
+      
+      path.lineTo(currentX + segmentWidth / 2, targetY);
+      path.lineTo(currentX + segmentWidth, targetY);
+      
+      currentX += segmentWidth;
+      currentY = targetY;
+      
+      // Add gap if available
+      if (i < gaps.length) {
+        final gapWidth = (gaps[i] / 1000.0) * size.width * 0.1;
+        currentX += gapWidth;
       }
     }
+
+    canvas.drawPath(path, paint);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    WavePainter oldPainter = oldDelegate as WavePainter;
-    return oldPainter.pattern != pattern || 
-           oldPainter.intensities != intensities ||
-           oldPainter.animation.value != animation.value || 
-           oldPainter.isPlaying != isPlaying ||
-           oldPainter.isSmallScreen != isSmallScreen;
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 } 

@@ -15,7 +15,7 @@ import '../main.dart';
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
-// Background message handler - iOS 18 COMPLIANT
+// Background message handler - UPDATED FOR iOS 18.6
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
@@ -24,26 +24,27 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     
     final messageType = message.data['type'];
     
-    // Handle ZAP notifications - SIMPLE NOTIFICATION FOR iOS
+    // Handle ZAP notifications - UPDATED FOR iOS 18.6
     if (messageType == 'new_zap') {
-      // iOS: Show simple notification (no haptics in background)
-      // Android: Can trigger vibration in background
+      // iOS 18.6: Show notification with haptic feedback
       if (Platform.isIOS) {
         await _showZapNotification();
+        // Trigger haptic feedback for iOS 18.6
+        await _triggerZapHapticForBackground();
       } else if (Platform.isAndroid) {
         await Future.delayed(Duration(milliseconds: 1000));
         await Vibration.vibrate(duration: 200);
       }
     }
     
-    // Handle message notifications - USER-FACING WITH ALERT+SOUND
+    // Handle message notifications - UPDATED FOR iOS 18.6
     if (messageType == 'new_message') {
       final senderName = message.data['senderName'] ?? 'Un amico';
       final conversationId = message.data['conversationId'] ?? '';
       await _showMessageNotification(senderName, conversationId);
     }
     
-    // Handle friend request notifications - USER-FACING WITH ALERT+SOUND
+    // Handle friend request notifications - UPDATED FOR iOS 18.6
     if (messageType == 'friend_request') {
       final senderName = message.data['senderName'] ?? 'Un amico';
       final senderUsername = message.data['senderUsername'] ?? 'amico';
@@ -54,7 +55,21 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
-// Show simple ZAP notification (iOS 18 compliant)
+// Trigger ZAP haptic for background - NEW FOR iOS 18.6
+Future<void> _triggerZapHapticForBackground() async {
+  try {
+    if (Platform.isIOS) {
+      // iOS 18.6: Use system haptic feedback
+      HapticFeedback.heavyImpact();
+      await Future.delayed(Duration(milliseconds: 150));
+      HapticFeedback.mediumImpact();
+    }
+  } catch (e) {
+    // Silent error handling
+  }
+}
+
+// Show simple ZAP notification (UPDATED FOR iOS 18.6)
 Future<void> _showZapNotification() async {
   try {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
@@ -76,6 +91,8 @@ Future<void> _showZapNotification() async {
       presentSound: true,
       sound: 'default',
       badgeNumber: 1,
+      categoryIdentifier: 'zap_it_zaps',
+      threadIdentifier: 'zap_notifications',
     );
 
     const NotificationDetails platformChannelSpecifics = NotificationDetails(
@@ -94,7 +111,7 @@ Future<void> _showZapNotification() async {
   }
 }
 
-// Initialize local notifications
+// Initialize local notifications - UPDATED FOR iOS 18.6
 Future<void> _initializeLocalNotifications() async {
   try {
     const AndroidInitializationSettings initializationSettingsAndroid =
@@ -105,6 +122,9 @@ Future<void> _initializeLocalNotifications() async {
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
+      onDidReceiveLocalNotification: (id, title, body, payload) async {
+        // Handle local notification
+      },
     );
     
     const InitializationSettings initializationSettings = InitializationSettings(
@@ -175,7 +195,7 @@ Future<void> _initializeLocalNotifications() async {
   }
 }
 
-// Handle ZAP notification in foreground
+// Handle ZAP notification in foreground - UPDATED FOR iOS 18.6
 Future<void> _handleZapNotification(RemoteMessage message) async {
   try {
     // Check if ZAPs are paused
@@ -184,22 +204,23 @@ Future<void> _handleZapNotification(RemoteMessage message) async {
       return;
     }
     
-    // Trigger haptics/vibration in foreground
+    // Trigger haptics/vibration in foreground - UPDATED FOR iOS 18.6
     await _triggerZapHaptic();
   } catch (e) {
     // Silent error handling
   }
 }
 
-// Trigger ZAP haptic/vibration
+// Trigger ZAP haptic/vibration - UPDATED FOR iOS 18.6
 Future<void> _triggerZapHaptic() async {
   try {
     if (Platform.isIOS) {
-      // iOS: Core Haptics in foreground
+      // iOS 18.6: Enhanced haptic feedback
       HapticFeedback.heavyImpact();
-      Future.delayed(Duration(milliseconds: 150), () {
-        HapticFeedback.mediumImpact();
-      });
+      await Future.delayed(Duration(milliseconds: 100));
+      HapticFeedback.mediumImpact();
+      await Future.delayed(Duration(milliseconds: 100));
+      HapticFeedback.lightImpact();
     } else if (Platform.isAndroid) {
       // Android: Vibration with pattern
       final hasVibrator = await Vibration.hasVibrator();
@@ -223,7 +244,7 @@ Future<void> _triggerZapHaptic() async {
   }
 }
 
-// Show message notification
+// Show message notification - UPDATED FOR iOS 18.6
 Future<void> _showMessageNotification(String senderName, String conversationId) async {
   try {
     final AndroidNotificationDetails androidPlatformChannelSpecifics =
@@ -247,6 +268,7 @@ Future<void> _showMessageNotification(String senderName, String conversationId) 
       presentSound: true,
       sound: 'default',
       categoryIdentifier: 'zap_it_messages',
+      threadIdentifier: 'chat_messages',
     );
     
     final NotificationDetails platformChannelSpecifics = NotificationDetails(
@@ -266,7 +288,7 @@ Future<void> _showMessageNotification(String senderName, String conversationId) 
   }
 }
 
-// Show friend request notification
+// Show friend request notification - UPDATED FOR iOS 18.6
 Future<void> _showFriendRequestNotification(String senderName, String senderUsername) async {
   try {
     final AndroidNotificationDetails androidPlatformChannelSpecifics =
@@ -290,6 +312,7 @@ Future<void> _showFriendRequestNotification(String senderName, String senderUser
       presentSound: true,
       sound: 'default',
       categoryIdentifier: 'zap_it_friend_requests',
+      threadIdentifier: 'friend_requests',
     );
     
     final NotificationDetails platformChannelSpecifics = NotificationDetails(
@@ -380,13 +403,13 @@ class NotificationService {
     }
   }
 
-  // Initialize push notifications - iOS 18 COMPLIANT
+  // Initialize push notifications - UPDATED FOR iOS 18.6
   Future<void> initializePushNotifications() async {
     try {
       // Initialize local notifications
       await _initializeLocalNotifications();
       
-      // Request permissions for iOS 18
+      // Request permissions for iOS 18.6
       try {
         NotificationSettings settings = await _firebaseMessaging.requestPermission(
           alert: true,
@@ -427,8 +450,10 @@ class NotificationService {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('fcm_token', token);
           
-          if (_auth.currentUser != null) {
-            await _firestore.collection('users').doc(_auth.currentUser!.uid).update({
+          // Save to Firestore
+          final userId = _auth.currentUser?.uid;
+          if (userId != null) {
+            await _firestore.collection('users').doc(userId).update({
               'fcmToken': token,
               'lastTokenUpdate': FieldValue.serverTimestamp(),
             });
@@ -438,38 +463,50 @@ class NotificationService {
         }
       }
       
-      // Handle foreground messages
+      // Set up foreground message handler - UPDATED FOR iOS 18.6
       FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-        if (message.data['type'] == 'new_zap') {
-          await _handleZapNotification(message);
-        }
-        
-        if (message.data['type'] == 'new_message') {
-          newMessageArrived.value = true;
-          await _handleMessageNotification(message);
-        }
-        
-        if (message.data['type'] == 'friend_request') {
-          await _handleFriendRequestNotification(message);
+        try {
+          final messageType = message.data['type'];
+          
+          if (messageType == 'new_zap') {
+            await _handleZapNotification(message);
+          } else if (messageType == 'new_message') {
+            final senderName = message.data['senderName'] ?? 'Un amico';
+            final conversationId = message.data['conversationId'] ?? '';
+            final messageNotifications = await _isMessageNotificationsEnabled();
+            
+            if (messageNotifications) {
+              await _showMessageNotification(senderName, conversationId);
+            }
+            
+            // Trigger UI refresh
+            newMessageArrived.value = true;
+          } else if (messageType == 'friend_request') {
+            final senderName = message.data['senderName'] ?? 'Un amico';
+            final senderUsername = message.data['senderUsername'] ?? 'amico';
+            final friendRequestNotifications = await _isFriendRequestNotificationsEnabled();
+            
+            if (friendRequestNotifications) {
+              await _showFriendRequestNotification(senderName, senderUsername);
+            }
+          }
+        } catch (e) {
+          // Silent error handling
         }
       });
       
-      // Set background message handler
+      // Set up background message handler
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
       
-      // Handle app opened from notification
+      // Handle notification taps
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         _handleNotificationTap(message);
       });
       
-      // Handle initial message
-      try {
-        RemoteMessage? initialMessage = await _firebaseMessaging.getInitialMessage();
-        if (initialMessage != null) {
-          _handleNotificationTap(initialMessage);
-        }
-      } catch (e) {
-        // Silent error handling
+      // Handle initial notification
+      RemoteMessage? initialMessage = await _firebaseMessaging.getInitialMessage();
+      if (initialMessage != null) {
+        _handleNotificationTap(initialMessage);
       }
       
     } catch (e) {
@@ -477,248 +514,67 @@ class NotificationService {
     }
   }
 
-  // Handle message notification in foreground
-  Future<void> _handleMessageNotification(RemoteMessage message) async {
-    try {
-      final messageNotificationsEnabled = await _isMessageNotificationsEnabled();
-      if (!messageNotificationsEnabled) {
-        return;
-      }
-      
-      final senderName = message.data['senderName'] ?? 'Un amico';
-      final conversationId = message.data['conversationId'] ?? '';
-      await _showMessageNotification(senderName, conversationId);
-    } catch (e) {
-      // Silent error handling
-    }
-  }
-
-  // Handle friend request notification in foreground
-  Future<void> _handleFriendRequestNotification(RemoteMessage message) async {
-    try {
-      final friendRequestNotificationsEnabled = await _isFriendRequestNotificationsEnabled();
-      if (!friendRequestNotificationsEnabled) {
-        return;
-      }
-      
-      final senderName = message.data['senderName'] ?? 'Un amico';
-      final senderUsername = message.data['senderUsername'] ?? 'amico';
-      await _showFriendRequestNotification(senderName, senderUsername);
-    } catch (e) {
-      // Silent error handling
-    }
-  }
-
-  // Handle notification tap
+  // Handle notification tap - UPDATED FOR iOS 18.6
   void _handleNotificationTap(RemoteMessage message) {
-    final type = message.data['type'];
-    
-    if (type == 'new_message') {
-      final conversationId = message.data['conversationId'];
-      final senderId = message.data['senderId'];
-      final senderName = message.data['senderName'] ?? 'Un amico';
-      
-      if (conversationId != null && senderId != null) {
-        _navigateToChat(conversationId, senderId, senderName);
-      }
-    }
-    
-    if (type == 'friend_request') {
-      _navigateToFriendRequests();
-    }
-  }
-
-  // Navigate to chat
-  void _navigateToChat(String conversationId, String senderId, String senderName) {
-    if (_navigationCallback != null) {
-      _navigationCallback!(conversationId, senderId, senderName);
-      return;
-    }
-    
     try {
-      _storePendingNavigation(conversationId, senderId, senderName);
+      final messageType = message.data['type'];
       
-      if (ZapItApp.navigatorKey.currentState != null) {
-        ZapItApp.navigatorKey.currentState!.pushNamed(
-          '/chat',
-          arguments: {
-            'conversationId': conversationId,
-            'otherUserId': senderId,
-            'otherUsername': senderName,
-          },
-        );
-      }
-    } catch (e) {
-      // Silent error handling
-    }
-  }
-  
-  // Store pending navigation data
-  void _storePendingNavigation(String conversationId, String senderId, String senderName) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('pending_navigation_conversationId', conversationId);
-      await prefs.setString('pending_navigation_senderId', senderId);
-      await prefs.setString('pending_navigation_senderName', senderName);
-    } catch (e) {
-      // Silent error handling
-    }
-  }
-  
-  // Check and handle pending navigation
-  Future<void> checkPendingNavigation() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final conversationId = prefs.getString('pending_navigation_conversationId');
-      final senderId = prefs.getString('pending_navigation_senderId');
-      final senderName = prefs.getString('pending_navigation_senderName');
-      
-      if (conversationId != null && senderId != null && senderName != null) {
-        await prefs.remove('pending_navigation_conversationId');
-        await prefs.remove('pending_navigation_senderId');
-        await prefs.remove('pending_navigation_senderName');
+      if (messageType == 'new_message') {
+        final conversationId = message.data['conversationId'] ?? '';
+        final senderId = message.data['senderId'] ?? '';
+        final senderName = message.data['senderName'] ?? '';
         
-        _navigateToChat(conversationId, senderId, senderName);
+        if (_navigationCallback != null) {
+          _navigationCallback!(conversationId, senderId, senderName);
+        }
       }
     } catch (e) {
       // Silent error handling
     }
   }
 
-  // Navigate to friend requests
-  void _navigateToFriendRequests() {
-    // To be implemented
-  }
-
-  // Handle local notification tap
+  // Handle local notification tap - UPDATED FOR iOS 18.6
   void handleLocalNotificationTap(String? payload) {
-    if (payload == null) return;
-    
-    if (payload.startsWith('message:')) {
-      final conversationId = payload.substring(8);
-      _getConversationDataAndNavigate(conversationId);
-    }
-    
-    if (payload.startsWith('friend_request:')) {
-      _navigateToFriendRequests();
-    }
-  }
-
-  // Get conversation data and navigate
-  Future<void> _getConversationDataAndNavigate(String conversationId) async {
     try {
-      final conversationDoc = await _firestore.collection('conversations').doc(conversationId).get();
-      if (conversationDoc.exists) {
-        final data = conversationDoc.data()!;
-        final participants = List<String>.from(data['participants']);
-        
-        final currentUserId = _auth.currentUser?.uid;
-        final otherUserId = participants.firstWhere((id) => id != currentUserId);
-        
-        final userDoc = await _firestore.collection('users').doc(otherUserId).get();
-        final senderName = userDoc.exists ? userDoc.data()!['username'] ?? 'Un amico' : 'Un amico';
-        
-        _navigateToChat(conversationId, otherUserId, senderName);
+      if (payload != null && payload.startsWith('message:')) {
+        final conversationId = payload.substring(7);
+        if (_navigationCallback != null) {
+          _navigationCallback!(conversationId, '', '');
+        }
       }
     } catch (e) {
       // Silent error handling
     }
   }
 
-  // Compatibility methods
-  Future<void> initialize() async {
-    await initializePushNotifications();
+  // Update FCM token - UPDATED FOR iOS 18.6
+  Future<void> updateFCMToken() async {
+    try {
+      final token = await _firebaseMessaging.getToken();
+      if (token != null) {
+        final userId = _auth.currentUser?.uid;
+        if (userId != null) {
+          await _firestore.collection('users').doc(userId).update({
+            'fcmToken': token,
+            'lastTokenUpdate': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+    } catch (e) {
+      // Silent error handling
+    }
   }
 
-  Stream<int> getUnreadZapCountStream() {
-    if (_auth.currentUser == null) return Stream.value(0);
-    
-    return _firestore
-        .collection('zaps')
-        .where('receiverId', isEqualTo: _auth.currentUser!.uid)
-        .where('status', isEqualTo: 'sent')
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs.length;
+  // Delete FCM token - UPDATED FOR iOS 18.6
+  Future<void> deleteFCMToken() async {
+    try {
+      final userId = _auth.currentUser?.uid;
+      if (userId != null) {
+        await _firestore.collection('users').doc(userId).update({
+          'fcmToken': FieldValue.delete(),
+          'lastTokenUpdate': FieldValue.serverTimestamp(),
         });
-  }
-
-  // Send ZAP notification
-  Future<bool> sendZapNotification(String receiverId, String senderName, {
-    String? vibrationPattern,
-    String? vibrationIntensity,
-    List<int>? customVibration,
-    String? vibeComposerId,
-  }) async {
-    try {
-      await _firestore.collection('zaps').add({
-        'senderId': _auth.currentUser!.uid,
-        'receiverId': receiverId,
-        'senderName': senderName,
-        'status': 'sent',
-        'created_at': FieldValue.serverTimestamp(),
-        'vibrationPattern': vibrationPattern ?? 'default',
-        'vibrationIntensity': vibrationIntensity ?? 'medium',
-        'customVibration': customVibration?.join(',') ?? '',
-        'vibeComposerId': vibeComposerId,
-      });
-      
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // Clear notifications
-  Future<void> clearAllNotifications() async {
-    await flutterLocalNotificationsPlugin.cancelAll();
-  }
-
-  Future<void> clearNotification(int id) async {
-    await flutterLocalNotificationsPlugin.cancel(id);
-  }
-
-  // Legacy methods for compatibility
-  Future<void> checkForUnreadZapNotifications() async {
-    // Legacy method - no longer needed
-  }
-
-  Future<void> cleanupOldNotifications() async {
-    // Cleanup method
-  }
-
-  Future<void> cleanupAllOldNotifications() async {
-    await clearAllNotifications();
-  }
-
-  Future<void> stopListening() async {
-    // Stop listening method
-  }
-
-  Future<void> markAllZapsAsRead() async {
-    try {
-      final currentUserId = _auth.currentUser?.uid;
-      if (currentUserId == null) return;
-
-      final unreadZaps = await _firestore
-          .collection('zaps')
-          .where('receiverId', isEqualTo: currentUserId)
-          .where('status', isEqualTo: 'sent')
-          .get();
-
-      for (var doc in unreadZaps.docs) {
-        await doc.reference.update({'status': 'read'});
       }
-    } catch (e) {
-      // Silent error handling
-    }
-  }
-
-  Future<void> processPendingNotifications() async {
-    try {
-      final currentUserId = _auth.currentUser?.uid;
-      if (currentUserId == null) return;
-      // Process any pending notifications
     } catch (e) {
       // Silent error handling
     }

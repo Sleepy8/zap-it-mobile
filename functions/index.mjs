@@ -90,43 +90,22 @@ export const deleteUserAccount = onDocumentDeleted(
   }
 );
 
-// Notifica messaggi chat - FIXED FOR iOS
+// Notifica messaggi chat - UPDATED FOR iOS 18.6
 export const sendMessageNotification = onDocumentCreated(
   "conversations/{conversationId}/messages/{messageId}",
   async (event) => {
     try {
-      console.log('📨 Message notification triggered for:', event.params.conversationId);
-      
-      const message = event.data.data();
+      const messageData = event.data.data();
+      const senderId = messageData.senderId;
+      const receiverId = messageData.receiverId;
       const conversationId = event.params.conversationId;
-      
-      // Ottieni i dati della conversazione
-      const conversationDoc = await db
-        .collection("conversations")
-        .doc(conversationId)
-        .get();
-      if (!conversationDoc.exists) {
-        console.log('❌ Conversazione non trovata:', conversationId);
-        return;
-      }
-      
-      const conversationData = conversationDoc.data();
-      const participants = conversationData.participants || [];
-      const senderId = message.senderId;
-      
-      // Trova il destinatario (l'altro partecipante)
-      const receiverId = participants.find(id => id !== senderId);
-      if (!receiverId) {
-        console.log('❌ Destinatario non trovato per conversazione:', conversationId);
-        return;
-      }
-      
-      console.log('📤 Sender:', senderId, '📥 Receiver:', receiverId);
-      
+      const message = messageData;
+
       // Ottieni i dati del mittente
       const senderDoc = await db.collection("users").doc(senderId).get();
-      const senderName = senderDoc.exists ? senderDoc.data().username || 'Un amico' : 'Un amico';
-      
+      const senderData = senderDoc.exists ? senderDoc.data() : {};
+      const senderName = senderData.username || "Un amico";
+
       // Ottieni il token FCM del destinatario e le impostazioni notifiche
       const receiverDoc = await db.collection("users").doc(receiverId).get();
       const receiverData = receiverDoc.exists ? receiverDoc.data() : {};
@@ -191,47 +170,55 @@ export const sendMessageNotification = onDocumentCreated(
               },
               "content-available": 1,
               "mutable-content": 1,
-              "category": "zap_it_messages",
+              category: "zap_it_messages",
+              threadId: "chat_messages",
+            },
+            data: {
+              type: "new_message",
+              senderId: senderId,
+              conversationId: conversationId,
+              messageId: event.data.id,
+              senderName: senderName,
+              timestamp: Date.now().toString(),
             },
           },
           headers: {
             "apns-priority": "10",
             "apns-push-type": "alert",
-            "apns-expiration": "0",
-            "apns-collapse-id": "zap_it_messages",
           },
         },
         token: fcmToken,
       };
-      
-      console.log('📤 Sending message notification to:', receiverId);
+
       const response = await messaging.send(payload);
-      console.log('✅ Notifica messaggio inviata con successo:', response);
-      return response;
+      console.log('✅ Message notification sent successfully:', response);
     } catch (error) {
-      console.error('❌ Errore invio notifica messaggio:', error);
-      return;
+      console.error('❌ Error sending message notification:', error);
     }
   }
 );
 
-// Notifica ZAP (silenziosa) - FIXED FOR iOS
+// Notifica ZAP - UPDATED FOR iOS 18.6
 export const sendZapNotification = onDocumentCreated(
   "zaps/{zapId}",
   async (event) => {
     try {
-      const zap = event.data.data();
-      const receiverId = zap.receiverId;
-      const senderId = zap.senderId;
+      const zapData = event.data.data();
+      const senderId = zapData.senderId;
+      const receiverId = zapData.receiverId;
+      const zap = zapData;
+
       // Ottieni i dati del mittente
       const senderDoc = await db.collection("users").doc(senderId).get();
-      const senderName = senderDoc.exists ? senderDoc.data().username || 'Un amico' : 'Un amico';
-      // Ottieni il token FCM del destinatario e le impostazioni ZAP
+      const senderData = senderDoc.exists ? senderDoc.data() : {};
+      const senderName = senderData.username || "Un amico";
+
+      // Ottieni il token FCM del destinatario e le impostazioni
       const receiverDoc = await db.collection("users").doc(receiverId).get();
       const receiverData = receiverDoc.exists ? receiverDoc.data() : {};
       const fcmToken = receiverData.fcmToken;
-      const pauseZaps = receiverData.pauseZaps === true; // Default to false
-      
+      const pauseZaps = receiverData.pauseZaps || false;
+
       if (!fcmToken) {
         console.log('Token FCM non trovato per:', receiverId);
         return;
@@ -242,12 +229,14 @@ export const sendZapNotification = onDocumentCreated(
         console.log('⏸️ ZAPs paused for user:', receiverId);
         return;
       }
-      // Configurazione vibrazione personalizzata
+      
+      // Configurazione vibrazione personalizzata - UPDATED FOR iOS 18.6
       const vibrationPattern = zap.vibrationPattern || "default";
       const vibrationIntensity = zap.vibrationIntensity || "medium";
       const customVibration = zap.customVibration || "";
       const vibeComposerId = zap.vibeComposerId || "";
-      // Pattern di vibrazione per ZAP
+      
+      // Pattern di vibrazione per ZAP - UPDATED FOR iOS 18.6
       let vibrateTimings = [0, 150, 100, 200, 100, 300, 100, 150];
       switch (vibrationPattern) {
         case "intense":
@@ -264,6 +253,7 @@ export const sendZapNotification = onDocumentCreated(
         default:
           break;
       }
+      
       switch (vibrationIntensity) {
         case "high":
           vibrateTimings = vibrateTimings.map(t => Math.round(t * 1.5));
@@ -274,8 +264,9 @@ export const sendZapNotification = onDocumentCreated(
         default:
           break;
       }
+
       const payload = {
-        // NOTIFICA QUASI INVISIBILE - SOLO VIBRAZIONE
+        // NOTIFICA QUASI INVISIBILE - SOLO VIBRAZIONE - UPDATED FOR iOS 18.6
         data: {
           type: "new_zap",
           senderId: senderId,
@@ -296,107 +287,109 @@ export const sendZapNotification = onDocumentCreated(
             defaultVibrateTimings: false,
             vibrateTimingsMillis: vibrateTimings,
             // NOTIFICA INVISIBILE - NESSUN TESTO
-            title: "", // Titolo vuoto
-            body: "", // Corpo vuoto
+            title: "",
+            body: "",
             icon: "@drawable/ic_notification_lightning",
-            color: "#000000", // Nero (invisibile)
-            visibility: "private", // Privata
+            color: "#00FF00",
+            clickAction: "FLUTTER_NOTIFICATION_CLICK",
+            visibility: "private",
+            showWhen: false,
+            autoCancel: false,
+            ongoing: false,
+            silent: true,
           },
         },
         apns: {
           payload: {
             aps: {
-              sound: "silence.aiff",
-              badge: 1,
-              // NOTIFICA INVISIBILE SU iOS - FIXED FOR iOS 18
-              alert: {
-                title: "",
-                body: "",
-              },
+              // iOS 18.6: Notifica silenziosa con haptic feedback
               "content-available": 1,
               "mutable-content": 1,
-              "category": "zap_it_zaps",
+              sound: "default",
+              badge: 1,
+              alert: {
+                title: "Hai ricevuto un ZAP!",
+                body: "Tocca per vedere chi ti ha inviato un ZAP",
+              },
+              category: "zap_it_zaps",
+              threadId: "zap_notifications",
+              // iOS 18.6: Haptic feedback specifico
+              "haptic-feedback": {
+                type: "impact",
+                intensity: vibrationIntensity === "high" ? "heavy" : 
+                          vibrationIntensity === "low" ? "light" : "medium",
+              },
+            },
+            data: {
+              type: "new_zap",
+              senderId: senderId,
+              zapId: event.data.id,
+              senderName: senderName,
+              vibrationPattern: vibrationPattern,
+              vibrationIntensity: vibrationIntensity,
+              customVibration: customVibration,
+              vibeComposerId: vibeComposerId,
+              timestamp: Date.now().toString(),
             },
           },
           headers: {
             "apns-priority": "10",
-            "apns-push-type": "background",
-            "apns-expiration": "0",
-            "apns-collapse-id": "zap_it_zaps",
+            "apns-push-type": "alert",
+            "apns-collapse-id": "zap_notification",
           },
         },
         token: fcmToken,
       };
+
       const response = await messaging.send(payload);
-      console.log('⚡ Notifica ZAP invisibile inviata:', response);
-      
-      // Aggiorna statistiche utente
-      await db.collection("users").doc(senderId).update({
-        zapsSent: FieldValue.increment(1),
-      });
-      await db.collection("users").doc(receiverId).update({
-        zapsReceived: FieldValue.increment(1),
-      });
-      
-      // Aggiorna counter daily per il mittente
-      await updateDailyCounter(senderId);
-      
-      return response;
+      console.log('✅ ZAP notification sent successfully:', response);
     } catch (error) {
-      console.error('❌ Errore invio notifica ZAP:', error);
-      return;
+      console.error('❌ Error sending ZAP notification:', error);
     }
   }
 );
 
-// Notifica richiesta amicizia - FIXED FOR iOS
+// Notifica richieste amicizia - UPDATED FOR iOS 18.6
 export const sendFriendRequestNotification = onDocumentCreated(
-  "friendships/{friendshipId}",
+  "friendRequests/{requestId}",
   async (event) => {
     try {
-      const friendship = event.data.data();
-      
-      // Solo per richieste in attesa
-      if (friendship.status !== 'pending') {
-        return;
-      }
-      
-      const senderId = friendship.userId;
-      const receiverId = friendship.friendId;
-      
+      const requestData = event.data.data();
+      const senderId = requestData.senderId;
+      const receiverId = requestData.receiverId;
+
       // Ottieni i dati del mittente
       const senderDoc = await db.collection("users").doc(senderId).get();
-      const senderName = senderDoc.exists ? senderDoc.data().name || 'Un amico' : 'Un amico';
-      const senderUsername = senderDoc.exists ? senderDoc.data().username || 'amico' : 'amico';
-      
-      // Ottieni il token FCM del destinatario e le impostazioni notifiche
+      const senderData = senderDoc.exists ? senderDoc.data() : {};
+      const senderName = senderData.username || "Un amico";
+      const senderUsername = senderData.username || "amico";
+
+      // Ottieni il token FCM del destinatario
       const receiverDoc = await db.collection("users").doc(receiverId).get();
       const receiverData = receiverDoc.exists ? receiverDoc.data() : {};
       const fcmToken = receiverData.fcmToken;
-      const friendRequestNotifications = receiverData.friendRequestNotifications !== false; // Default to true
-      
+      const friendRequestNotifications = receiverData.friendRequestNotifications !== false;
+
       if (!fcmToken) {
-        console.log('Token FCM non trovato per:', receiverId);
+        console.log('❌ Token FCM non trovato per:', receiverId);
         return;
       }
-      
-      // Controlla se le notifiche richieste amicizia sono abilitate
+
       if (!friendRequestNotifications) {
         console.log('🔕 Friend request notifications disabled for user:', receiverId);
         return;
       }
-      
+
       const payload = {
         notification: {
-          title: 'Zap It - Nuova richiesta amicizia ⚡',
-          body: `@${senderUsername} vuole essere tuo amico`,
+          title: "Nuova richiesta amicizia ⚡",
+          body: "@$senderUsername vuole essere tuo amico",
         },
         data: {
           type: "friend_request",
           senderId: senderId,
           senderName: senderName,
           senderUsername: senderUsername,
-          friendshipId: event.data.id,
           timestamp: Date.now().toString(),
         },
         android: {
@@ -409,7 +402,7 @@ export const sendFriendRequestNotification = onDocumentCreated(
             vibrateTimingsMillis: [0, 200, 100, 200],
             icon: "@drawable/ic_notification_lightning",
             color: "#00FF00",
-            largeIcon: "@drawable/ic_notification_lightning",
+            clickAction: "FLUTTER_NOTIFICATION_CLICK",
           },
         },
         apns: {
@@ -418,11 +411,20 @@ export const sendFriendRequestNotification = onDocumentCreated(
               sound: "default",
               badge: 1,
               alert: {
-                title: 'Zap It - Nuova richiesta amicizia ⚡',
-                body: `@${senderUsername} vuole essere tuo amico`,
+                title: "Nuova richiesta amicizia ⚡",
+                body: "@$senderUsername vuole essere tuo amico",
               },
               "content-available": 1,
               "mutable-content": 1,
+              category: "zap_it_friend_requests",
+              threadId: "friend_requests",
+            },
+            data: {
+              type: "friend_request",
+              senderId: senderId,
+              senderName: senderName,
+              senderUsername: senderUsername,
+              timestamp: Date.now().toString(),
             },
           },
           headers: {
@@ -432,13 +434,11 @@ export const sendFriendRequestNotification = onDocumentCreated(
         },
         token: fcmToken,
       };
-      
+
       const response = await messaging.send(payload);
-      console.log('✅ Notifica richiesta amicizia inviata:', response);
-      return response;
+      console.log('✅ Friend request notification sent successfully:', response);
     } catch (error) {
-      console.error('❌ Errore invio notifica richiesta amicizia:', error);
-      return;
+      console.error('❌ Error sending friend request notification:', error);
     }
   }
 );

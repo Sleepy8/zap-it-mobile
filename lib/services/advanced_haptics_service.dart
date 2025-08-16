@@ -14,15 +14,15 @@ class AdvancedHapticsService {
   bool _hasVibrator = false;
   int _lastIntensityBucket = -1;
 
-  // iOS 18 specific: Check if app is in foreground
+  // iOS 18.6 specific: Check if app is in foreground
   bool _isAppInForeground = true;
 
-  // Initialize haptics service
+  // Initialize haptics service - UPDATED FOR iOS 18.6
   Future<void> initialize() async {
     if (_isInitialized) return;
 
     try {
-      // Check platform capabilities
+      // Check platform capabilities - UPDATED FOR iOS 18.6
       if (Platform.isIOS) {
         _isHapticCapable = true;
         _isHapticFeedbackSupported = true;
@@ -42,26 +42,19 @@ class AdvancedHapticsService {
     }
   }
 
-  // Set app foreground state (call this when app state changes)
+  // Set app foreground state (call this when app state changes) - UPDATED FOR iOS 18.6
   void setAppForegroundState(bool isForeground) {
     _isAppInForeground = isForeground;
   }
 
-  // Play intensity-based haptic (iOS 18 optimized)
+  // Play intensity-based haptic - UPDATED FOR iOS 18.6
   Future<void> playIntensityHaptic(double intensity) async {
     if (!_isInitialized) await initialize();
     if (!isHapticCapable) return;
 
     try {
       if (Platform.isIOS) {
-        // iOS 18: Only trigger haptics if app is in foreground
-        if (!_isAppInForeground) {
-          // For iOS: Haptics don't work in background, so we skip them
-          // The notification will provide feedback instead
-          return;
-        }
-        
-        // Use Core Haptics equivalent through Flutter
+        // iOS 18.6: Enhanced haptic feedback
         await _emitIosHaptic(intensity);
       } else if (Platform.isAndroid) {
         // Android: Can use vibration in background
@@ -98,14 +91,14 @@ class AdvancedHapticsService {
     // This method is no longer needed
   }
 
-  // Haptic per iOS (discretizzato in bucket)
+  // Haptic per iOS - UPDATED FOR iOS 18.6
   Future<void> _emitIosHaptic(double intensity) async {
     try {
-      // Mappa intensità a 5 bucket discreti
+      // Mappa intensità a 5 bucket discreti - UPDATED FOR iOS 18.6
       final bucket = (intensity * 5).floor().clamp(0, 4);
 
-      // Emetti solo se bucket è cambiato
-      if (bucket != _lastIntensityBucket) {
+      // Emetti solo se bucket è cambiato o se è un feedback importante
+      if (bucket != _lastIntensityBucket || intensity > 0.8) {
         _lastIntensityBucket = bucket;
 
         switch (bucket) {
@@ -116,11 +109,16 @@ class AdvancedHapticsService {
             HapticFeedback.lightImpact();
             break;
           case 2:
-          case 3:
             HapticFeedback.mediumImpact();
             break;
-          case 4:
+          case 3:
             HapticFeedback.heavyImpact();
+            break;
+          case 4:
+            // iOS 18.6: Enhanced heavy impact
+            HapticFeedback.heavyImpact();
+            await Future.delayed(Duration(milliseconds: 50));
+            HapticFeedback.mediumImpact();
             break;
         }
       }
@@ -132,7 +130,7 @@ class AdvancedHapticsService {
     }
   }
 
-  // Haptic per Android
+  // Haptic per Android - UPDATED FOR iOS 18.6
   Future<void> _emitAndroidHaptic(double intensity) async {
     try {
       if (_hasVibrator) {
@@ -153,7 +151,7 @@ class AdvancedHapticsService {
     }
   }
 
-  // Haptic Android con controllo ampiezza
+  // Haptic Android con controllo ampiezza - UPDATED FOR iOS 18.6
   Future<void> _emitAndroidAmplitudeHaptic(double intensity) async {
     final amplitude = (intensity * 255).round().clamp(1, 255);
 
@@ -163,7 +161,7 @@ class AdvancedHapticsService {
     );
   }
 
-  // Haptic Android standard (effetti predefiniti)
+  // Haptic Android standard (effetti predefiniti) - UPDATED FOR iOS 18.6
   Future<void> _emitAndroidStandardHaptic(double intensity) async {
     if (intensity >= 0.8) {
       HapticFeedback.heavyImpact();
@@ -176,7 +174,7 @@ class AdvancedHapticsService {
     }
   }
 
-  // Feedback di selezione (per tap/release)
+  // Feedback di selezione (per tap/release) - UPDATED FOR iOS 18.6
   Future<void> emitSelectionFeedback() async {
     if (!_isInitialized) await initialize();
     if (!_isHapticFeedbackSupported) return;
@@ -188,14 +186,17 @@ class AdvancedHapticsService {
     }
   }
 
-  // Feedback di successo
+  // Feedback di successo - UPDATED FOR iOS 18.6
   Future<void> emitSuccessFeedback() async {
     if (!_isInitialized) await initialize();
     if (!isHapticCapable) return;
 
     try {
       if (Platform.isIOS) {
+        // iOS 18.6: Enhanced success feedback
         HapticFeedback.mediumImpact();
+        await Future.delayed(Duration(milliseconds: 100));
+        HapticFeedback.lightImpact();
       } else {
         if (_hasVibrator) {
           await Vibration.vibrate(pattern: [0, 100, 50, 100]);
@@ -208,13 +209,16 @@ class AdvancedHapticsService {
     }
   }
 
-  // Feedback di errore
+  // Feedback di errore - UPDATED FOR iOS 18.6
   Future<void> emitErrorFeedback() async {
     if (!_isInitialized) await initialize();
     if (!isHapticCapable) return;
 
     try {
       if (Platform.isIOS) {
+        // iOS 18.6: Enhanced error feedback
+        HapticFeedback.heavyImpact();
+        await Future.delayed(Duration(milliseconds: 100));
         HapticFeedback.heavyImpact();
       } else {
         if (_hasVibrator) {
@@ -228,7 +232,7 @@ class AdvancedHapticsService {
     }
   }
 
-  // Feedback leggero (per hover/preview)
+  // Feedback leggero (per hover/preview) - UPDATED FOR iOS 18.6
   Future<void> emitLightFeedback() async {
     if (!_isInitialized) await initialize();
     if (!_isHapticFeedbackSupported) return;
@@ -240,19 +244,34 @@ class AdvancedHapticsService {
     }
   }
 
-  // Riproduce pattern completo
+  // Riproduce pattern completo - UPDATED FOR iOS 18.6
   Future<void> playPattern(List<double> pattern) async {
     if (!_isInitialized) await initialize();
     if (!isHapticCapable || pattern.isEmpty) return;
 
-    // Riproduce pattern con timing
-    for (int i = 0; i < pattern.length; i++) {
-      await playIntensityHaptic(pattern[i]);
-      Future.delayed(const Duration(milliseconds: 100));
+    try {
+      // Riproduce pattern con timing migliorato - UPDATED FOR iOS 18.6
+      for (int i = 0; i < pattern.length; i++) {
+        await playIntensityHaptic(pattern[i]);
+        if (i < pattern.length - 1) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+      }
+    } catch (e) {
+      // Fallback a pattern semplice
+      try {
+        if (Platform.isIOS) {
+          HapticFeedback.mediumImpact();
+        } else if (_hasVibrator) {
+          await Vibration.vibrate(duration: 200);
+        }
+      } catch (_) {
+        // Silent fallback
+      }
     }
   }
 
-  // Riproduce pattern di vibrazione tradizionale
+  // Riproduce pattern di vibrazione tradizionale - UPDATED FOR iOS 18.6
   Future<void> playVibrationPattern(List<int> pattern) async {
     if (!_isInitialized) await initialize();
     if (!_hasVibrator || pattern.isEmpty) return;
@@ -262,6 +281,73 @@ class AdvancedHapticsService {
     } catch (e) {
       // Fallback a vibrazione singola
       await Vibration.vibrate(duration: 200);
+    }
+  }
+
+  // Nuovo metodo per ZAP specifico - UPDATED FOR iOS 18.6
+  Future<void> playZapHaptic() async {
+    if (!_isInitialized) await initialize();
+    if (!isHapticCapable) return;
+
+    try {
+      if (Platform.isIOS) {
+        // iOS 18.6: ZAP specific haptic pattern
+        HapticFeedback.heavyImpact();
+        await Future.delayed(Duration(milliseconds: 150));
+        HapticFeedback.mediumImpact();
+        await Future.delayed(Duration(milliseconds: 100));
+        HapticFeedback.lightImpact();
+      } else if (Platform.isAndroid) {
+        if (_hasVibrator) {
+          await Vibration.vibrate(
+            pattern: [0, 200, 100, 300, 100, 400, 100, 300, 100, 200],
+          );
+        } else {
+          HapticFeedback.heavyImpact();
+        }
+      }
+    } catch (e) {
+      // Fallback
+      try {
+        if (Platform.isIOS) {
+          HapticFeedback.mediumImpact();
+        } else if (_hasVibrator) {
+          await Vibration.vibrate(duration: 200);
+        }
+      } catch (_) {
+        // Silent fallback
+      }
+    }
+  }
+
+  // Nuovo metodo per feedback di registrazione - UPDATED FOR iOS 18.6
+  Future<void> playRecordingFeedback(double intensity) async {
+    if (!_isInitialized) await initialize();
+    if (!isHapticCapable) return;
+
+    try {
+      if (Platform.isIOS) {
+        // iOS 18.6: Recording specific feedback
+        if (intensity > 0.7) {
+          HapticFeedback.heavyImpact();
+        } else if (intensity > 0.4) {
+          HapticFeedback.mediumImpact();
+        } else {
+          HapticFeedback.lightImpact();
+        }
+      } else if (Platform.isAndroid) {
+        if (_hasVibrator) {
+          final amplitude = (intensity * 255).round().clamp(1, 255);
+          await Vibration.vibrate(duration: 50, amplitude: amplitude);
+        } else {
+          HapticFeedback.mediumImpact();
+        }
+      }
+    } catch (e) {
+      // Fallback
+      try {
+        HapticFeedback.selectionClick();
+      } catch (_) {}
     }
   }
 
@@ -275,11 +361,12 @@ class AdvancedHapticsService {
     // This method is no longer needed
   }
 
-  // Getters per stato e capacità
+  // Getters per stato e capacità - UPDATED FOR iOS 18.6
   bool get isInitialized => _isInitialized;
   bool get hasVibrator => _hasVibrator;
   bool get hasAmplitudeControl => false; // This getter is no longer relevant
   bool get isHapticFeedbackSupported => _isHapticFeedbackSupported;
   bool get isHapticCapable => _isHapticCapable;
   double get currentIntensity => 0.0; // This getter is no longer relevant
+  bool get isAppInForeground => _isAppInForeground;
 }
